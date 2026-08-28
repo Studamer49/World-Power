@@ -1,0 +1,25 @@
+# Render blueprint for the World Power backend API.
+# Deploy: Render dashboard -> New -> Blueprint -> select this repo.
+# You will be prompted to enter values for the sync:false env vars.
+services:
+  - type: web
+    name: world-power-api
+    runtime: node
+    rootDir: backend
+    plan: free
+    buildCommand: npm install && npx prisma generate && npx prisma migrate deploy && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: DATABASE_URL
+        sync: false
+      - key: DIRECT_URL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: FRONTEND_URL
+        sync: false

@@ -1,4 +1,19 @@
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+declare global {
+  interface Window {
+    WORLD_POWER_API_URL?: string;
+  }
+}
+
+// Resolve the backend API base URL:
+//   1. VITE_API_URL baked in at build time (set via GitHub Actions secret), or
+//   2. window.WORLD_POWER_API_URL set at runtime (escape hatch, no rebuild), or
+//   3. empty string (request() surfaces a clear, actionable error instead of a
+//      silent "Failed to fetch").
+const API_BASE: string = (
+  (import.meta.env.VITE_API_URL as string) ||
+  (typeof window !== 'undefined' ? window.WORLD_POWER_API_URL : undefined) ||
+  ''
+).replace(/\/$/, '');
 
 let authToken: string | null = null;
 
@@ -58,6 +73,13 @@ async function request<T>(path: string, options: RequestInit = {}, tokenOverride
 
   if (tokenOverride === null) {
     delete headers['Authorization'];
+  }
+
+  if (!API_BASE) {
+    throw new Error(
+      'Backend not configured. Add the VITE_API_URL secret in GitHub (Settings -> Secrets -> Actions) ' +
+        'or set window.WORLD_POWER_API_URL to your backend URL, e.g. https://your-api.onrender.com'
+    );
   }
 
   const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
