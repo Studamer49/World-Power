@@ -27,7 +27,6 @@ import AdminLogin from './components/AdminLogin';
 import NotesPanel from './components/NotesPanel';
 import AdminNotes from './components/AdminNotes';
 import CountryLoginModal from './components/CountryLoginModal';
-import Spinner from './components/Spinner';
 import { useAuth } from './context/AuthContext';
 import { getFlagEmoji } from './data/flags';
 
@@ -137,7 +136,7 @@ function AdminView() {
           </div>
         </header>
         <main className="main">
-          <Spinner />
+          <div className="empty-state">Loading game data...</div>
         </main>
       </div>
     );
@@ -310,7 +309,7 @@ function PublicView() {
           </div>
         </header>
         <main className="main">
-          <Spinner />
+          <div className="empty-state">Loading...</div>
         </main>
       </div>
     );
