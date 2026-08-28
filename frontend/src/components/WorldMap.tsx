@@ -1,9 +1,13 @@
 import { useState, useRef, useCallback } from 'react';
 import { GameState, Country } from '../types';
 import { getFlagEmoji } from '../data/flags';
-import { COUNTRY_GEO, project, WORLD_MAP_PATH } from '../data/worldMap';
+import { COUNTRY_GEO, project } from '../data/worldMap';
 import { formatMoney } from '../utils/calculations';
 import { getResearchTierForGDP } from '../data/research';
+import worldMapSrc from '../assets/world-map.png';
+
+const MAP_W = 1000;
+const MAP_H = 507; // world-map-2400px.png is 2400x1216 => ~1.974 aspect
 
 type Props = {
   gameState: GameState;
@@ -35,7 +39,7 @@ export default function WorldMap({ gameState, onSelectCountry }: Props) {
     const pos: Record<string, NodePos> = {};
     for (const c of countries) {
       const geo = COUNTRY_GEO[c.name];
-      pos[c.id] = geo ? project(geo.lat, geo.lon) : { x: 500, y: 250 };
+      pos[c.id] = geo ? project(geo.lat, geo.lon, MAP_W, MAP_H) : { x: MAP_W / 2, y: MAP_H / 2 };
     }
     return pos;
   });
@@ -125,25 +129,26 @@ export default function WorldMap({ gameState, onSelectCountry }: Props) {
         onMouseDown={handleBackgroundMouseDown}
       >
         <g transform={`translate(${pan.x}, ${pan.y}) scale(${zoom})`}>
-          <rect x={0} y={0} width={1000} height={500} fill="#0b1026" />
+          <rect x={0} y={0} width={MAP_W} height={MAP_H} fill="#0b1026" />
 
-          {/* World map continents */}
-          <path
-            d={WORLD_MAP_PATH}
-            fill="#1c2e44"
-            stroke="#2f4d6e"
-            strokeWidth={1}
-            opacity={0.9}
+          {/* Real world map background */}
+          <image
+            href={worldMapSrc}
+            x={0}
+            y={0}
+            width={MAP_W}
+            height={MAP_H}
+            preserveAspectRatio="xMidYMid meet"
           />
 
           {/* Graticule lines */}
           {[-120, -60, 0, 60, 120].map(lon => {
-            const { x } = project(0, lon);
-            return <line key={`m${lon}`} x1={x} y1={0} x2={x} y2={500} stroke="#12203a" strokeWidth={0.5} />;
+            const { x } = project(0, lon, MAP_W, MAP_H);
+            return <line key={`m${lon}`} x1={x} y1={0} x2={x} y2={MAP_H} stroke="#12203a" strokeWidth={0.5} />;
           })}
           {[-60, 0, 60].map(lat => {
-            const { y } = project(lat, 0);
-            return <line key={`p${lat}`} x1={0} y1={y} x2={1000} y2={y} stroke="#12203a" strokeWidth={0.5} />;
+            const { y } = project(lat, 0, MAP_W, MAP_H);
+            return <line key={`p${lat}`} x1={0} y1={y} x2={MAP_W} y2={y} stroke="#12203a" strokeWidth={0.5} />;
           })}
 
           {/* Connection lines for wars */}
