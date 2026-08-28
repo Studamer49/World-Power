@@ -228,6 +228,8 @@ export default function WorldMap({ gameState, onSelectCountry }: Props) {
                   style={{ cursor: 'pointer', opacity: c.alive ? 1 : 0.6 }}
                   onClick={() => setSelectedId(c.id)}
                   onDoubleClick={() => onSelectCountry(c.id)}
+                  onMouseEnter={() => setHoveredName(c.name)}
+                  onMouseLeave={() => setHoveredName(null)}
                 >
                   <circle r={size / 2 + 4} fill="rgba(11,16,38,0.55)" stroke="#ffffff" strokeWidth={1.2} />
                   {img ? (

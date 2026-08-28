@@ -56,6 +56,12 @@ export default function WarManager({ gameState, onClose }: Props) {
     dispatch({ type: 'UPDATE_WAR', payload: { id: warId, updates } });
   };
 
+  const deleteWar = (warId: string) => {
+    if (window.confirm('Delete this war permanently?')) {
+      dispatch({ type: 'DELETE_WAR', payload: warId });
+    }
+  };
+
   const addWarScore = (warId: string, countryId: string, amount: number, reason: string) => {
     const event = {
       id: generateId(),
@@ -203,6 +209,7 @@ export default function WarManager({ gameState, onClose }: Props) {
                       {war.status !== 'ended' && (
                         <button className="btn btn-xs btn-danger" onClick={() => updateWarStatus(war.id, 'ended')}>END WAR</button>
                       )}
+                      <button className="btn btn-xs btn-danger" onClick={() => deleteWar(war.id)}>DELETE WAR</button>
                     </div>
                   </div>
                 )}
