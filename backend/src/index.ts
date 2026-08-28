@@ -19,7 +19,9 @@ import snapshotsRoutes from './routes/snapshots';
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3000', 10);
-const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
+// Normalize so a trailing slash or path (e.g. ".../World-Power/") never leaks
+// into the CORS origin header. CORS origins are scheme://host[:port] only.
+const FRONTEND_URL = (process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/+$/, '').replace(/(https?:\/\/[^/]+)\/.*$/i, '$1');
 
 // Middleware
 app.use(cors({
