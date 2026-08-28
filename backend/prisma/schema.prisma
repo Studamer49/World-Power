@@ -1,0 +1,282 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model GameConfig {
+  id            String   @id @default("default")
+  gameDay       Int      @default(1)
+  gameDate      String   @default("14 August 2026")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  countries     Country[]
+  battles       Battle[]
+  wars          War[]
+  expenses      Expense[]
+  moneyChanges  MoneyChange[]
+  mpChanges     MPChange[]
+  treaties      Treaty[]
+  snapshots     DailySnapshot[]
+  warScoreEvents WarScoreEvent[]
+}
+
+model Country {
+  id            String   @id @default(cuid())
+  gameConfigId  String   @default("default")
+  gameConfig    GameConfig @relation(fields: [gameConfigId], references: [id])
+  
+  name          String
+  playerName    String   @default("")
+  leaderName    String   @default("")
+  governmentName String  @default("")
+  flag          String   @default("")
+  password      String   @default("")
+  alive         Boolean  @default(true)
+  dateCreated   String   @default("")
+  money         Float    @default(10000)
+  mp            Float    @default(1500)
+  gdp           Float    @default(20)
+  dailyIncome   Float    @default(1500)
+  dailyMP       Float    @default(300)
+  researchTier  Int      @default(1)
+  investmentGDP Float    @default(0)
+  
+  manualOverrides String  @default("{}")
+  
+  completedResearch String @default("[]")
+  unitInventory    String   @default("{}")
+  
+  capturedTerritories Territory[]
+  territoryHistory   TerritoryCaptureHistory[]
+  battlesAttacked    Battle[]   @relation("BattleAttacker")
+  battlesDefended    Battle[]   @relation("BattleDefender")
+  expenses           Expense[]
+  moneyChanges       MoneyChange[]
+  mpChanges          MPChange[]
+  notes              Note[]
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model Territory {
+  id                String   @id @default(cuid())
+  countryId         String
+  country           Country  @relation(fields: [countryId], references: [id], onDelete: Cascade)
+  
+  name              String
+  owner             String
+  capturingCountryId String
+  capturedOnDay     Int
+  capturedOnDate    String
+  status            String   @default("occupied")
+  moneyIncome       Float    @default(1000)
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model TerritoryCaptureHistory {
+  id        String   @id @default(cuid())
+  countryId String
+  country   Country  @relation(fields: [countryId], references: [id], onDelete: Cascade)
+  
+  day       Int
+  date      String
+  territoriesData String @default("[]")
+  
+  createdAt DateTime @default(now())
+}
+
+model Battle {
+  id          String   @id @default(cuid())
+  gameConfigId String  @default("default")
+  gameConfig  GameConfig @relation(fields: [gameConfigId], references: [id])
+  
+  warId       String?
+  day         Int
+  date        String
+  attackerId  String
+  attacker    Country  @relation("BattleAttacker", fields: [attackerId], references: [id])
+  defenderId  String
+  defender    Country  @relation("BattleDefender", fields: [defenderId], references: [id])
+  target      String
+  
+  attackerUnitsData String @default("[]")
+  defenderUnitsData String @default("[]")
+  
+  attackerMP           Float
+  defenderMP           Float
+  attackerEffectivePower Float
+  defenderEffectivePower Float
+  winner               String
+  result               String
+  mpLostAttacker       Float
+  mpLostDefender       Float
+  territoryCaptured    Boolean @default(false)
+  territoryName        String  @default("")
+  notes                String  @default("")
+  
+  createdAt DateTime @default(now())
+}
+
+model War {
+  id            String   @id @default(cuid())
+  gameConfigId  String   @default("default")
+  gameConfig    GameConfig @relation(fields: [gameConfigId], references: [id])
+  
+  name          String
+  attackerIds   String   @default("[]")
+  defenderIds   String   @default("[]")
+  startDate     String
+  startDay      Int
+  endDate       String   @default("")
+  endDay        Int      @default(0)
+  status        String   @default("active")
+  battles       String   @default("[]")
+  territoriesCaptured String @default("[]")
+  territoriesLost     String @default("[]")
+  warScore      String   @default("{}")
+  notes         String   @default("")
+  
+  warScoreEvents WarScoreEvent[]
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model WarScoreEvent {
+  id        String   @id @default(cuid())
+  warId     String
+  war       War      @relation(fields: [warId], references: [id], onDelete: Cascade)
+  gameConfigId String @default("default")
+  gameConfig GameConfig @relation(fields: [gameConfigId], references: [id])
+  
+  countryId String
+  amount    Float
+  reason    String
+  day       Int
+  date      String
+  
+  createdAt DateTime @default(now())
+}
+
+model Expense {
+  id          String   @id @default(cuid())
+  gameConfigId String  @default("default")
+  gameConfig  GameConfig @relation(fields: [gameConfigId], references: [id])
+  countryId   String
+  country     Country  @relation(fields: [countryId], references: [id])
+  
+  day         Int
+  date        String
+  amount      Float
+  category    String
+  description String
+  
+  createdAt DateTime @default(now())
+}
+
+model MoneyChange {
+  id          String   @id @default(cuid())
+  gameConfigId String  @default("default")
+  gameConfig  GameConfig @relation(fields: [gameConfigId], references: [id])
+  countryId   String
+  country     Country  @relation(fields: [countryId], references: [id])
+  
+  day         Int
+  date        String
+  amount      Float
+  type        String
+  from        String   @default("")
+  to          String   @default("")
+  description String
+  
+  createdAt DateTime @default(now())
+}
+
+model MPChange {
+  id          String   @id @default(cuid())
+  gameConfigId String  @default("default")
+  gameConfig  GameConfig @relation(fields: [gameConfigId], references: [id])
+  countryId   String
+  country     Country  @relation(fields: [countryId], references: [id])
+  
+  day         Int
+  date        String
+  amount      Float
+  type        String
+  description String
+  
+  createdAt DateTime @default(now())
+}
+
+model Treaty {
+  id               String   @id @default(cuid())
+  gameConfigId     String   @default("default")
+  gameConfig       GameConfig @relation(fields: [gameConfigId], references: [id])
+  
+  name             String
+  countryIds       String   @default("[]")
+  territoryId      String
+  territoryOwnerId String
+  splits           String   @default("[]")
+  day              Int
+  date             String
+  notes            String   @default("")
+  
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model Note {
+  id        String   @id @default(cuid())
+  countryId String
+  country   Country  @relation(fields: [countryId], references: [id])
+  
+  text      String
+  day       Int
+  date      String
+  
+  author    String   @default("")
+  isGM      Boolean  @default(false)
+  replyToId String?
+  replies   Note[]   @relation("NoteReplies")
+  parent    Note?    @relation("NoteReplies", fields: [replyToId], references: [id], onDelete: Cascade)
+  
+  createdAt DateTime @default(now())
+}
+
+model GameState {
+  id        String   @id @default("default")
+  data      String   @default("{}")
+  updatedAt DateTime @updatedAt
+}
+
+model DailySnapshot {
+  id          String   @id @default(cuid())
+  gameConfigId String  @default("default")
+  gameConfig  GameConfig @relation(fields: [gameConfigId], references: [id])
+  
+  gameDay     Int
+  date        String
+  countryId   String
+  
+  data        String   @default("{}")
+  
+  createdAt   DateTime @default(now())
+}
+
+model MilitaryConfig {
+  id            String   @id @default("default")
+  unitConfigs   String   @default("{}")
+  matchups      String   @default("[]")
+  tierResearchRequirements String @default("{}")
+  updatedAt     DateTime @updatedAt
+}
