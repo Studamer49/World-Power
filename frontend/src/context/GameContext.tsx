@@ -141,39 +141,29 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         let mpGain = c.dailyMP;
 
         const updatedTerritories = c.capturedTerritories.map(t => {
+          const ownerPctFromTreaties = (() => {
+            for (const treaty of treaties) {
+              if (treaty.territoryId === t.id && treaty.territoryOwnerId === id) {
+                const memberPct = treaty.splits
+                  .filter(s => s.countryId !== id)
+                  .reduce((sum, s) => sum + (s.percent || 0), 0);
+                return Math.max(0, 100 - memberPct);
+              }
+            }
+            return 100;
+          })();
           if (t.status === 'occupied') {
             const daysHeld = newDay - t.capturedOnDay;
             if (daysHeld >= OCCUPATION_DAYS) {
               return { ...t, status: 'integrated' as const, moneyIncome: INTEGRATED_MONEY_INCOME };
             }
-            let occMoney = OCCUPIED_MONEY_INCOME;
-            let occMP = OCCUPIED_MP_INCOME;
-            for (const treaty of treaties) {
-              if (treaty.territoryId === t.id && treaty.territoryOwnerId === id) {
-                const ownerSplit = treaty.splits.find(s => s.countryId === id);
-                if (ownerSplit) {
-                  occMoney = Math.round(OCCUPIED_MONEY_INCOME * (ownerSplit.percent / 100));
-                  occMP = Math.round(OCCUPIED_MP_INCOME * (ownerSplit.percent / 100));
-                }
-              }
-            }
-            moneyGain += occMoney;
-            mpGain += occMP;
+            moneyGain += Math.round(OCCUPIED_MONEY_INCOME * (ownerPctFromTreaties / 100));
+            mpGain += Math.round(OCCUPIED_MP_INCOME * (ownerPctFromTreaties / 100));
             return t;
           } else {
-            let intMoney = t.moneyIncome > 0 ? t.moneyIncome : INTEGRATED_MONEY_INCOME;
-            let intMP = INTEGRATED_MP_INCOME;
-            for (const treaty of treaties) {
-              if (treaty.territoryId === t.id && treaty.territoryOwnerId === id) {
-                const ownerSplit = treaty.splits.find(s => s.countryId === id);
-                if (ownerSplit) {
-                  intMoney = Math.round(intMoney * (ownerSplit.percent / 100));
-                  intMP = Math.round(INTEGRATED_MP_INCOME * (ownerSplit.percent / 100));
-                }
-              }
-            }
-            moneyGain += intMoney;
-            mpGain += intMP;
+            const intMoney = t.moneyIncome > 0 ? t.moneyIncome : INTEGRATED_MONEY_INCOME;
+            moneyGain += Math.round(intMoney * (ownerPctFromTreaties / 100));
+            mpGain += Math.round(INTEGRATED_MP_INCOME * (ownerPctFromTreaties / 100));
             return t;
           }
         });

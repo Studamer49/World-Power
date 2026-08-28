@@ -91,6 +91,7 @@ export default function WorldMap({ gameState, onSelectCountry }: Props) {
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [hoveredNumeric, setHoveredNumeric] = useState<number | null>(null);
+  const [hoveredName, setHoveredName] = useState<string | null>(null);
   const [zoom, setZoom] = useState(1);
   const [center, setCenter] = useState<[number, number]>([0, 0]);
 
@@ -101,6 +102,44 @@ export default function WorldMap({ gameState, onSelectCountry }: Props) {
     }
     return undefined;
   };
+
+  const resolveHover = (name: string) => {
+    const match = (a: string) => a.trim().toLowerCase() === name.trim().toLowerCase();
+    const gameCountry = Object.values(gameState.countries).find(c => match(c.name));
+    let claim: { owner: Country; territoryId: string; ownerId: string; status: string } | null = null;
+    for (const c of Object.values(gameState.countries)) {
+      if (!c.alive) continue;
+      const t = (c.capturedTerritories || []).find(t => match(t.name));
+      if (t) { claim = { owner: c, territoryId: t.id, ownerId: c.id, status: t.status }; break; }
+    }
+    if (!claim) {
+      for (const c of Object.values(gameState.countries)) {
+        if (!c.alive) continue;
+        for (const t of c.capturedTerritories || []) {
+          if (NUMERIC_ISO[t.name] === NUMERIC_ISO[name]) { claim = { owner: c, territoryId: t.id, ownerId: c.id, status: t.status }; break; }
+        }
+        if (claim) break;
+      }
+    }
+    const treaty = claim
+      ? Object.values(gameState.treaties || {}).find(tr => tr.territoryId === claim!.territoryId && tr.territoryOwnerId === claim!.ownerId)
+      : undefined;
+    const conquered = !!gameCountry && !gameCountry.alive;
+    const possession = claim ? [{
+      countryId: claim.ownerId,
+      name: claim.owner.name,
+      flag: claim.owner.flag,
+      percent: treaty ? Math.max(0, 100 - treaty.splits.filter(s => s.countryId !== claim!.ownerId).reduce((a, s) => a + s.percent, 0)) : 100,
+    }, ...(treaty ? treaty.splits.filter(s => s.countryId !== claim!.ownerId).map(s => ({
+      countryId: s.countryId,
+      name: gameState.countries[s.countryId]?.name || '???',
+      flag: gameState.countries[s.countryId]?.flag || '',
+      percent: s.percent,
+    })) : [])] : [];
+    return { gameCountry, claim, treaty, conquered, possession };
+  };
+
+  const hoverInfo = hoveredName ? resolveHover(hoveredName) : null;
 
   const resetView = () => {
     setZoom(1);
@@ -155,8 +194,8 @@ export default function WorldMap({ gameState, onSelectCountry }: Props) {
                       hover: { outline: 'none', fill: owner ? '#4a9ad6' : '#34506e' },
                       pressed: { outline: 'none' },
                     }}
-                    onMouseEnter={() => setHoveredNumeric(numericId)}
-                    onMouseLeave={() => setHoveredNumeric(null)}
+                    onMouseEnter={() => { setHoveredNumeric(numericId); setHoveredName(title || null); }}
+                    onMouseLeave={() => { setHoveredNumeric(null); setHoveredName(null); }}
                     onClick={(e) => {
                       if (owner) setSelectedId(owner.id);
                     }}
@@ -239,6 +278,31 @@ export default function WorldMap({ gameState, onSelectCountry }: Props) {
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {hoverInfo && (
+        <div className="world-map-hover-popup">
+          <div className="hover-popup-title">
+            {hoverInfo.gameCountry ? `${hoverInfo.gameCountry.flag} ` : ''}{hoverInfo.gameCountry?.name || hoveredName}
+          </div>
+          <div className={hoverInfo.conquered || hoverInfo.claim ? 'text-danger' : 'text-success'}>
+            {hoverInfo.conquered || hoverInfo.claim ? 'CONQUERED' : 'NOT CONQUERED'}
+          </div>
+          {hoverInfo.claim ? (
+            <div className="hover-popup-possession">
+              <div className="hover-popup-subtitle">POSSESSION</div>
+              {hoverInfo.possession.map(p => (
+                <div key={p.countryId} className="hover-popup-pos-row">
+                  <span>{p.flag} {p.name}</span>
+                  <span>{p.percent}%</span>
+                </div>
+              ))}
+              <div className="hover-popup-status">Status: {hoverInfo.claim!.status.toUpperCase()}</div>
+            </div>
+          ) : hoverInfo.gameCountry && !hoverInfo.gameCountry.alive && (
+            <div className="hover-popup-status">Eliminated — territory open</div>
+          )}
         </div>
       )}
     </div>
