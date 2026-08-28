@@ -1,9 +1,10 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState } from 'react';
 import {
   ComposableMap,
   Geography,
   Geographies,
   Marker,
+  ZoomableGroup,
 } from 'react-simple-maps';
 import { GameState, Country } from '../types';
 import { getFlagEmoji } from '../data/flags';
@@ -91,7 +92,7 @@ export default function WorldMap({ gameState, onSelectCountry }: Props) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [hoveredNumeric, setHoveredNumeric] = useState<number | null>(null);
   const [zoom, setZoom] = useState(1);
-  const mapRef = useRef<HTMLDivElement>(null);
+  const [center, setCenter] = useState<[number, number]>([0, 0]);
 
   // Find which country owns a given numeric ISO geography id
   const ownerOf = (numericId: number): Country | undefined => {
@@ -101,25 +102,18 @@ export default function WorldMap({ gameState, onSelectCountry }: Props) {
     return undefined;
   };
 
-  useEffect(() => {
-    const el = mapRef.current;
-    if (!el) return;
-    const onWheel = (e: WheelEvent) => {
-      e.preventDefault();
-      const delta = e.deltaY > 0 ? 0.85 : 1.18;
-      setZoom(z => Math.min(3, Math.max(0.5, z * delta)));
-    };
-    el.addEventListener('wheel', onWheel, { passive: false });
-    return () => el.removeEventListener('wheel', onWheel);
-  }, []);
+  const resetView = () => {
+    setZoom(1);
+    setCenter([0, 0]);
+  };
 
   const selected = selectedId ? countriesById[selectedId] : undefined;
 
   return (
-    <div className="world-map-container" ref={mapRef}>
+    <div className="world-map-container">
       <div className="world-map-toolbar">
-        <span className="text-muted">Hover to highlight | Scroll to zoom | Click to select | Double-click to open</span>
-        <button className="btn btn-xs" onClick={() => setZoom(1)}>RESET ZOOM</button>
+        <span className="text-muted">Drag to pan | Scroll to zoom | Click to select | Click ocean to deselect | Double-click to open</span>
+        <button className="btn btn-xs" onClick={resetView}>RESET VIEW</button>
         <span className="text-muted">Zoom: {Math.round(zoom * 100)}%</span>
       </div>
 
@@ -130,8 +124,17 @@ export default function WorldMap({ gameState, onSelectCountry }: Props) {
         style={{ width: '100%', height: '100%' }}
         projectionConfig={{ scale: 150 }}
       >
-        <g style={{ transform: `scale(${zoom})`, transformOrigin: 'center' }}>
-          <rect width={1000} height={505} fill="#0b1026" />
+        <ZoomableGroup
+          center={center}
+          zoom={zoom}
+          minZoom={0.5}
+          maxZoom={4}
+          onMoveEnd={({ coordinates, zoom: z }: { coordinates: [number, number]; zoom: number }) => {
+            setCenter(coordinates);
+            setZoom(z);
+          }}
+        >
+          <rect width={1000} height={505} fill="#0b1026" style={{ cursor: 'grab' }} onClick={() => setSelectedId(null)} />
           <Geographies geography={worldTopo}>
             {({ geographies }) =>
               geographies.map(geo => {
@@ -175,7 +178,8 @@ export default function WorldMap({ gameState, onSelectCountry }: Props) {
             const isSelected = selectedId === c.id;
             const isHovered = hoveredNumeric === NUMERIC_ISO[c.name];
             const img = FLAG_IMAGES[ISO[c.name]];
-            const size = isSelected || isHovered ? 34 : 28;
+            const base = isSelected || isHovered ? 40 : 32;
+            const size = base / zoom;
             return (
               <Marker key={c.id} coordinates={[geo.lon, geo.lat]}>
                 <g
@@ -207,7 +211,7 @@ export default function WorldMap({ gameState, onSelectCountry }: Props) {
               </Marker>
             );
           })}
-        </g>
+        </ZoomableGroup>
       </ComposableMap>
 
       {selected && (

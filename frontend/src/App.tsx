@@ -22,6 +22,7 @@ import WorldMap from './components/WorldMap';
 import TreatyModal from './components/TreatyModal';
 import PublicDashboard from './components/PublicDashboard';
 import PublicCountryDetail from './components/PublicCountryDetail';
+import PublicIntel from './components/PublicIntel';
 import AdminLogin from './components/AdminLogin';
 import NotesPanel from './components/NotesPanel';
 import AdminNotes from './components/AdminNotes';
@@ -289,6 +290,7 @@ function PublicView() {
   const [selectedCountryId, setSelectedCountryId] = useState<string | null>(null);
   const [showNotes, setShowNotes] = useState(false);
   const [showCountryLogin, setShowCountryLogin] = useState(false);
+  const [showIntel, setShowIntel] = useState(false);
 
   const country = selectedCountryId && gameState ? gameState.countries[selectedCountryId] : null;
   const loggedCountry = loggedIn && countryName && gameState
@@ -363,6 +365,21 @@ function PublicView() {
         </div>
       </header>
 
+      <nav className="sub-nav">
+        <button
+          className={`btn btn-xs ${!showIntel && !country ? 'btn-accent' : ''}`}
+          onClick={() => { setShowIntel(false); setSelectedCountryId(null); }}
+        >
+          DASHBOARD
+        </button>
+        <button
+          className={`btn btn-xs ${showIntel && !country ? 'btn-accent' : ''}`}
+          onClick={() => { setShowIntel(true); setSelectedCountryId(null); }}
+        >
+          MAP &amp; INTEL
+        </button>
+      </nav>
+
       <main className="main">
         {country ? (
           <PublicCountryDetail
@@ -371,6 +388,8 @@ function PublicView() {
             gameState={gameState}
             onBack={() => setSelectedCountryId(null)}
           />
+        ) : showIntel ? (
+          <PublicIntel gameState={gameState} onSelectCountry={(id) => { setSelectedCountryId(id); setShowIntel(false); }} />
         ) : (
           <PublicDashboard
             gameState={gameState}

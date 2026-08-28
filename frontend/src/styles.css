@@ -299,3 +299,12 @@ select.input-sm{cursor:pointer}
 .note-reply-box{display:flex;flex-direction:column;gap:6px;margin-top:6px}
 .note-actions{display:flex;gap:6px;margin-top:6px}
 .admin-notes-controls{display:flex;flex-direction:column;gap:8px;padding:8px 0;border-bottom:1px solid var(--border)}
+
+.country-pick-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:6px;max-height:220px;overflow-y:auto;margin:6px 0 4px}
+.country-pick-item{display:flex;align-items:center;gap:8px;width:100%;padding:8px 10px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);cursor:pointer;text-align:left;font-size:12px}
+.country-pick-item:hover{background:var(--bg3)}
+.country-pick-item.selected{border-color:var(--accent);background:var(--bg4)}
+.country-pick-flag{font-size:16px}
+.country-pick-name{flex:1}
+.country-pick-check{color:var(--accent);font-weight:700}
+.intel-view .sub-nav{justify-content:flex-start}
