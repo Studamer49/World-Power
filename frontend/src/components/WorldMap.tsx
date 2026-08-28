@@ -1,295 +1,233 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import {
+  ComposableMap,
+  Geography,
+  Geographies,
+  Marker,
+} from 'react-simple-maps';
 import { GameState, Country } from '../types';
 import { getFlagEmoji } from '../data/flags';
-import { COUNTRY_GEO, project } from '../data/worldMap';
+import { COUNTRY_GEO } from '../data/worldMap';
 import { formatMoney } from '../utils/calculations';
 import { getResearchTierForGDP } from '../data/research';
-import worldMapSrc from '../assets/world-map.png';
 
-const MAP_W = 1000;
-const MAP_H = 507; // world-map-2400px.png is 2400x1216 => ~1.974 aspect
+import worldTopo from '../data/countries-110m.json';
+
+import flSe from '../assets/flags/se.png';
+import flMn from '../assets/flags/mn.png';
+import flUs from '../assets/flags/us.png';
+import flCn from '../assets/flags/cn.png';
+import flRu from '../assets/flags/ru.png';
+import flAr from '../assets/flags/ar.png';
+import flIl from '../assets/flags/il.png';
+import flKp from '../assets/flags/kp.png';
+import flAu from '../assets/flags/au.png';
+import flNg from '../assets/flags/ng.png';
+
+const FLAG_IMAGES: Record<string, string> = {
+  SE: flSe,
+  MN: flMn,
+  US: flUs,
+  CN: flCn,
+  RU: flRu,
+  AR: flAr,
+  IL: flIl,
+  KP: flKp,
+  AU: flAu,
+  NG: flNg,
+};
+
+// Country name -> numeric ISO 3166-1 (matches world-atlas TopoJSON ids)
+const NUMERIC_ISO: Record<string, number> = {
+  Sweden: 752,
+  Mongolia: 496,
+  USA: 840,
+  China: 156,
+  Russia: 643,
+  Argentina: 32,
+  Israel: 376,
+  'North Korea': 408,
+  Australia: 36,
+  Nigeria: 566,
+};
+
+const ISO: Record<string, string> = {
+  Sweden: 'SE',
+  Mongolia: 'MN',
+  USA: 'US',
+  China: 'CN',
+  Russia: 'RU',
+  Argentina: 'AR',
+  Israel: 'IL',
+  'North Korea': 'KP',
+  Australia: 'AU',
+  Nigeria: 'NG',
+};
 
 type Props = {
   gameState: GameState;
   onSelectCountry: (id: string) => void;
 };
 
-type NodePos = { x: number; y: number };
-
-function getNodeColor(country: Country): string {
-  if (!country.alive) return '#3a1a1a';
-  const totalTerrs = country.capturedTerritories.length;
-  if (totalTerrs > 5) return '#1a3a1a';
-  if (totalTerrs > 2) return '#1a2a3a';
-  return 'transparent';
+function fillFor(c: Country | undefined, selected: boolean, hovered: boolean): string {
+  if (!c) return '#2a3b52';
+  if (!c.alive) return '#5a2b2b';
+  const base = selected ? '#3d6bd6' : hovered ? '#3f5f9e' : '#3f8f5a';
+  return base;
 }
 
-function getBorderColor(country: Country): string {
-  if (!country.alive) return '#e55454';
-  const totalTerrs = country.capturedTerritories.length;
-  if (totalTerrs > 5) return '#3ecf8e';
-  if (totalTerrs > 2) return '#4a7dff';
-  return '#3a3d5e';
+function strokeColor(c: Country | undefined, selected: boolean): string {
+  if (!c) return '#4a5a75';
+  if (selected) return '#ffd54a';
+  if (!c.alive) return '#e55454';
+  return '#6b7d9e';
 }
 
 export default function WorldMap({ gameState, onSelectCountry }: Props) {
-  const countries = Object.values(gameState.countries);
+  const countriesById = Object.fromEntries(Object.values(gameState.countries).map(c => [c.id, c]));
+  const nameById: Record<string, string> = {};
+  for (const c of Object.values(gameState.countries)) nameById[c.id] = c.name;
 
-  const [positions, setPositions] = useState<Record<string, NodePos>>(() => {
-    const pos: Record<string, NodePos> = {};
-    for (const c of countries) {
-      const geo = COUNTRY_GEO[c.name];
-      pos[c.id] = geo ? project(geo.lat, geo.lon, MAP_W, MAP_H) : { x: MAP_W / 2, y: MAP_H / 2 };
-    }
-    return pos;
-  });
-
-  const [dragging, setDragging] = useState<string | null>(null);
-  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
-  const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [hoveredNumeric, setHoveredNumeric] = useState<number | null>(null);
   const [zoom, setZoom] = useState(1);
-  const [pan, setPan] = useState({ x: 0, y: 0 });
-  const [panning, setPanning] = useState(false);
-  const [panStart, setPanStart] = useState({ x: 0, y: 0 });
-  const svgRef = useRef<SVGSVGElement>(null);
+  const mapRef = useRef<HTMLDivElement>(null);
 
-  const handleMouseDown = useCallback((e: React.MouseEvent, countryId: string) => {
-    e.stopPropagation();
-    const svgRect = svgRef.current?.getBoundingClientRect();
-    if (!svgRect) return;
-    const svgX = (e.clientX - svgRect.left) / zoom - pan.x;
-    const svgY = (e.clientY - svgRect.top) / zoom - pan.y;
-    setDragging(countryId);
-    setDragOffset({
-      x: svgX - positions[countryId].x,
-      y: svgY - positions[countryId].y,
-    });
-  }, [positions, zoom, pan]);
-
-  const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    const svgRect = svgRef.current?.getBoundingClientRect();
-    if (!svgRect) return;
-
-    if (dragging) {
-      const svgX = (e.clientX - svgRect.left) / zoom - pan.x;
-      const svgY = (e.clientY - svgRect.top) / zoom - pan.y;
-      setPositions(prev => ({
-        ...prev,
-        [dragging]: { x: svgX - dragOffset.x, y: svgY - dragOffset.y },
-      }));
-    } else if (panning) {
-      const dx = (e.clientX - panStart.x) / zoom;
-      const dy = (e.clientY - panStart.y) / zoom;
-      setPan(prev => ({ x: prev.x + dx, y: prev.y + dy }));
-      setPanStart({ x: e.clientX, y: e.clientY });
+  // Find which country owns a given numeric ISO geography id
+  const ownerOf = (numericId: number): Country | undefined => {
+    for (const c of Object.values(gameState.countries)) {
+      if (NUMERIC_ISO[c.name] === numericId) return c;
     }
-  }, [dragging, dragOffset, panning, panStart, zoom, pan]);
+    return undefined;
+  };
 
-  const handleMouseUp = useCallback(() => {
-    setDragging(null);
-    setPanning(false);
+  useEffect(() => {
+    const el = mapRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const delta = e.deltaY > 0 ? 0.85 : 1.18;
+      setZoom(z => Math.min(3, Math.max(0.5, z * delta)));
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
   }, []);
 
-  const handleBackgroundMouseDown = useCallback((e: React.MouseEvent) => {
-    setPanning(true);
-    setPanStart({ x: e.clientX, y: e.clientY });
-    setSelectedId(null);
-  }, []);
-
-  const handleWheel = useCallback((e: React.WheelEvent) => {
-    e.preventDefault();
-    const delta = e.deltaY > 0 ? 0.9 : 1.1;
-    setZoom(z => Math.min(3, Math.max(0.3, z * delta)));
-  }, []);
-
-  const handleClick = useCallback((countryId: string) => {
-    setSelectedId(countryId);
-  }, []);
-
-  const handleDoubleClick = useCallback((countryId: string) => {
-    onSelectCountry(countryId);
-  }, [onSelectCountry]);
+  const selected = selectedId ? countriesById[selectedId] : undefined;
 
   return (
-    <div className="world-map-container">
+    <div className="world-map-container" ref={mapRef}>
       <div className="world-map-toolbar">
-        <span className="text-muted">Drag countries to move | Scroll to zoom | Click to select | Double-click to open</span>
-        <button className="btn btn-xs" onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }}>RESET VIEW</button>
+        <span className="text-muted">Hover to highlight | Scroll to zoom | Click to select | Double-click to open</span>
+        <button className="btn btn-xs" onClick={() => setZoom(1)}>RESET ZOOM</button>
         <span className="text-muted">Zoom: {Math.round(zoom * 100)}%</span>
       </div>
 
-      <svg
-        ref={svgRef}
-        className="world-map-svg"
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseUp}
-        onWheel={handleWheel}
-        onMouseDown={handleBackgroundMouseDown}
+      <ComposableMap
+        projection="geoEquirectangular"
+        width={1000}
+        height={505}
+        style={{ width: '100%', height: '100%' }}
+        projectionConfig={{ scale: 150 }}
       >
-        <g transform={`translate(${pan.x}, ${pan.y}) scale(${zoom})`}>
-          <rect x={0} y={0} width={MAP_W} height={MAP_H} fill="#0b1026" />
-
-          {/* Real world map background */}
-          <image
-            href={worldMapSrc}
-            x={0}
-            y={0}
-            width={MAP_W}
-            height={MAP_H}
-            preserveAspectRatio="xMidYMid meet"
-          />
-
-          {/* Graticule lines */}
-          {[-120, -60, 0, 60, 120].map(lon => {
-            const { x } = project(0, lon, MAP_W, MAP_H);
-            return <line key={`m${lon}`} x1={x} y1={0} x2={x} y2={MAP_H} stroke="#12203a" strokeWidth={0.5} />;
-          })}
-          {[-60, 0, 60].map(lat => {
-            const { y } = project(lat, 0, MAP_W, MAP_H);
-            return <line key={`p${lat}`} x1={0} y1={y} x2={MAP_W} y2={y} stroke="#12203a" strokeWidth={0.5} />;
-          })}
-
-          {/* Connection lines for wars */}
-          {Object.values(gameState.wars).filter(w => w.status === 'active').map(war => {
-            const lines: JSX.Element[] = [];
-            for (const aId of war.attackerIds) {
-              for (const dId of war.defenderIds) {
-                const aPos = positions[aId];
-                const dPos = positions[dId];
-                if (aPos && dPos) {
-                  lines.push(
-                    <line
-                      key={`${war.id}-${aId}-${dId}`}
-                      x1={aPos.x} y1={aPos.y}
-                      x2={dPos.x} y2={dPos.y}
-                      stroke="#e55454"
-                      strokeWidth={1.5}
-                      strokeDasharray="6,4"
-                      opacity={0.6}
-                    />
-                  );
-                }
-              }
+        <g style={{ transform: `scale(${zoom})`, transformOrigin: 'center' }}>
+          <rect width={1000} height={505} fill="#0b1026" />
+          <Geographies geography={worldTopo}>
+            {({ geographies }) =>
+              geographies.map(geo => {
+                const title = (geo.properties as any)?.name as string | undefined;
+                const numericId = Number((geo as any).id);
+                const owner = ownerOf(numericId);
+                const isSelected = owner && owner.id === selectedId;
+                const isHovered = hoveredNumeric === numericId;
+                return (
+                  <Geography
+                    key={geo.rsmKey}
+                    geography={geo}
+                    fill={fillFor(owner, !!isSelected, isHovered)}
+                    stroke={strokeColor(owner, !!isSelected)}
+                    strokeWidth={isSelected ? 1 : 0.4}
+                    style={{
+                      default: { outline: 'none' },
+                      hover: { outline: 'none', fill: owner ? '#4a9ad6' : '#34506e' },
+                      pressed: { outline: 'none' },
+                    }}
+                    onMouseEnter={() => setHoveredNumeric(numericId)}
+                    onMouseLeave={() => setHoveredNumeric(null)}
+                    onClick={(e) => {
+                      if (owner) setSelectedId(owner.id);
+                    }}
+                    onDoubleClick={(e) => {
+                      if (owner) onSelectCountry(owner.id);
+                    }}
+                  >
+                    {title && <title>{title}</title>}
+                  </Geography>
+                );
+              })
             }
-            return lines;
-          })}
+          </Geographies>
 
-          {/* Connection lines for treaties */}
-          {Object.values(gameState.treaties || {}).map(treaty => {
-            const lines: JSX.Element[] = [];
-            for (let i = 0; i < treaty.countryIds.length; i++) {
-              for (let j = i + 1; j < treaty.countryIds.length; j++) {
-                const aPos = positions[treaty.countryIds[i]];
-                const bPos = positions[treaty.countryIds[j]];
-                if (aPos && bPos) {
-                  lines.push(
-                    <line
-                      key={`treaty-${treaty.id}-${i}-${j}`}
-                      x1={aPos.x} y1={aPos.y}
-                      x2={bPos.x} y2={bPos.y}
-                      stroke="#3ecf8e"
-                      strokeWidth={1}
-                      strokeDasharray="4,4"
-                      opacity={0.5}
-                    />
-                  );
-                }
-              }
-            }
-            return lines;
-          })}
-
-          {/* Country flag markers */}
-          {countries.map(c => {
-            const pos = positions[c.id];
-            if (!pos) return null;
+          {/* Flag markers on top of countries */}
+          {Object.values(gameState.countries).map(c => {
+            const geo = COUNTRY_GEO[c.name];
+            if (!geo) return null;
             const isSelected = selectedId === c.id;
-            const isHovered = hoveredId === c.id;
-            const border = getBorderColor(c);
-
+            const isHovered = hoveredNumeric === NUMERIC_ISO[c.name];
+            const img = FLAG_IMAGES[ISO[c.name]];
+            const size = isSelected || isHovered ? 34 : 28;
             return (
-              <g
-                key={c.id}
-                transform={`translate(${pos.x}, ${pos.y})`}
-                onMouseDown={e => handleMouseDown(e, c.id)}
-                onMouseEnter={() => setHoveredId(c.id)}
-                onMouseLeave={() => setHoveredId(null)}
-                onClick={e => { e.stopPropagation(); handleClick(c.id); }}
-                onDoubleClick={e => { e.stopPropagation(); handleDoubleClick(c.id); }}
-                style={{ cursor: dragging === c.id ? 'grabbing' : 'grab' }}
-                opacity={c.alive ? 1 : 0.55}
-              >
-                {/* Anchor pin */}
-                <line x1={0} y1={0} x2={0} y2={14} stroke="#666d8a" strokeWidth={2} />
-                <circle cx={0} cy={14} r={2.5} fill="#8890a4" />
-
-                {/* Flag shield */}
-                <circle
-                  cx={0}
-                  cy={0}
-                  r={16}
-                  fill="#111827"
-                  stroke={isSelected ? '#4a7dff' : border}
-                  strokeWidth={isSelected ? 3 : isHovered ? 2.5 : 2}
-                />
-                <circle cx={0} cy={0} r={13} fill={getNodeColor(c)} />
-                <text x={0} y={7} textAnchor="middle" fontSize={16}>
-                  {getFlagEmoji(c.name)}
-                </text>
-
-                {/* Territory count chip */}
-                {c.capturedTerritories.length > 0 && (
-                  <g>
-                    <circle cx={14} cy={-14} r={8} fill="#3ecf8e" stroke="#0b1026" strokeWidth={1.5} />
-                    <text x={14} y={-11} textAnchor="middle" fill="#000" fontSize={9} fontWeight={700}>
-                      {c.capturedTerritories.length}
+              <Marker key={c.id} coordinates={[geo.lon, geo.lat]}>
+                <g
+                  style={{ cursor: 'pointer', opacity: c.alive ? 1 : 0.6 }}
+                  onClick={() => setSelectedId(c.id)}
+                  onDoubleClick={() => onSelectCountry(c.id)}
+                >
+                  <circle r={size / 2 + 4} fill="rgba(11,16,38,0.55)" stroke="#ffffff" strokeWidth={1.2} />
+                  {img ? (
+                    <image
+                      href={img}
+                      x={-size}
+                      y={-size / 2}
+                      width={size * 2}
+                      height={size}
+                      preserveAspectRatio="xMidYMid meet"
+                    />
+                  ) : (
+                    <text y={6} textAnchor="middle" fontSize={20}>
+                      {getFlagEmoji(c.name)}
                     </text>
-                  </g>
-                )}
-
-                {/* Name label */}
-                <g transform={`translate(22, -4)`}>
-                  <rect
-                    x={-3}
-                    y={-8}
-                    width={94}
-                    height={16}
-                    rx={3}
-                    fill="#0b1026"
-                    stroke={border}
-                    strokeWidth={0.8}
-                    opacity={0.95}
-                  />
-                  <text x={44} y={4} textAnchor="middle" fill="#e6e9f5" fontSize={10} fontWeight={700}>
-                    {getFlagEmoji(c.name)} {c.name}
-                  </text>
+                  )}
+                  {!c.alive && (
+                    <text y={-size / 2 - 6} textAnchor="middle" fontSize={12} fill="#e55454" fontWeight={700}>
+                      ✕
+                    </text>
+                  )}
                 </g>
-              </g>
+              </Marker>
             );
           })}
         </g>
-      </svg>
+      </ComposableMap>
 
-      {selectedId && gameState.countries[selectedId] && (
+      {selected && (
         <div className="world-map-info-panel">
           <div className="info-panel-header">
-            <span>{getFlagEmoji(gameState.countries[selectedId].name)} {gameState.countries[selectedId].name}</span>
-            <button className="btn btn-xs btn-accent" onClick={() => onSelectCountry(selectedId)}>OPEN</button>
+            <span>{getFlagEmoji(selected.name)} {selected.name}</span>
+            <button className="btn btn-xs btn-accent" onClick={() => onSelectCountry(selected.id)}>OPEN</button>
             <button className="btn btn-xs btn-ghost" onClick={() => setSelectedId(null)}>X</button>
           </div>
           <div className="info-panel-body">
-            <div>Player: {gameState.countries[selectedId].playerName || '—'}</div>
-            <div>Leader: {gameState.countries[selectedId].leaderName || '—'}</div>
-            <div>Money: {formatMoney(gameState.countries[selectedId].money)}</div>
-            <div>MP: {formatMoney(gameState.countries[selectedId].mp)}</div>
-            <div>GDP: {gameState.countries[selectedId].gdp}</div>
-            <div>Tier: T{getResearchTierForGDP(gameState.countries[selectedId].gdp)}</div>
-            <div>Territories: {gameState.countries[selectedId].capturedTerritories.length}</div>
-            {gameState.countries[selectedId].capturedTerritories.length > 0 && (
+            <div>Player: {selected.playerName || '—'}</div>
+            <div>Leader: {selected.leaderName || '—'}</div>
+            <div>Money: {formatMoney(selected.money)}</div>
+            <div>MP: {formatMoney(selected.mp)}</div>
+            <div>GDP: {selected.gdp}</div>
+            <div>Tier: T{getResearchTierForGDP(selected.gdp)}</div>
+            <div>Territories: {selected.capturedTerritories.length}</div>
+            {selected.capturedTerritories.length > 0 && (
               <div className="info-terr-list">
-                {gameState.countries[selectedId].capturedTerritories.map(t => (
+                {selected.capturedTerritories.map(t => (
                   <span key={t.id} className={`research-tag ${t.status === 'integrated' ? 'completed' : 'available'}`}>
                     {t.name}
                   </span>
