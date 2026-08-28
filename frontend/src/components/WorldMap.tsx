@@ -113,12 +113,15 @@ export default function WorldMap({ gameState, onSelectCountry }: Props) {
       if (t) { claim = { owner: c, territoryId: t.id, ownerId: c.id, status: t.status }; break; }
     }
     if (!claim) {
-      for (const c of Object.values(gameState.countries)) {
-        if (!c.alive) continue;
-        for (const t of c.capturedTerritories || []) {
-          if (NUMERIC_ISO[t.name] === NUMERIC_ISO[name]) { claim = { owner: c, territoryId: t.id, ownerId: c.id, status: t.status }; break; }
+      const hIso = NUMERIC_ISO[name];
+      if (hIso !== undefined) {
+        for (const c of Object.values(gameState.countries)) {
+          if (!c.alive) continue;
+          for (const t of c.capturedTerritories || []) {
+            if (NUMERIC_ISO[t.name] === hIso) { claim = { owner: c, territoryId: t.id, ownerId: c.id, status: t.status }; break; }
+          }
+          if (claim) break;
         }
-        if (claim) break;
       }
     }
     const treaty = claim
@@ -300,8 +303,12 @@ export default function WorldMap({ gameState, onSelectCountry }: Props) {
               ))}
               <div className="hover-popup-status">Status: {hoverInfo.claim!.status.toUpperCase()}</div>
             </div>
-          ) : hoverInfo.gameCountry && !hoverInfo.gameCountry.alive && (
+          ) : hoverInfo.gameCountry && hoverInfo.gameCountry.alive ? (
+            <div className="hover-popup-status">Active player — {hoverInfo.gameCountry.playerName || hoverInfo.gameCountry.leaderName || 'Alive'}</div>
+          ) : hoverInfo.gameCountry && !hoverInfo.gameCountry.alive ? (
             <div className="hover-popup-status">Eliminated — territory open</div>
+          ) : (
+            <div className="hover-popup-status">Independent nation</div>
           )}
         </div>
       )}
