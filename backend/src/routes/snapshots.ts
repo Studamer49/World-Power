@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import prisma from '../prisma';
+import { requireAdmin } from '../middleware/auth';
 
 const router = Router();
 
@@ -44,7 +45,7 @@ router.get('/', async (req, res) => {
 });
 
 // POST - Create snapshot
-router.post('/', async (req, res) => {
+router.post('/', requireAdmin, async (req, res) => {
   try {
     const snapshot = await prisma.dailySnapshot.create({
       data: {

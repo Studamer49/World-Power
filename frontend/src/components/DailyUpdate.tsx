@@ -1,5 +1,5 @@
 import { GameState } from '../types';
-import { formatMoney, formatMP, calculateDailyIncome } from '../utils/calculations';
+import { formatMoney, formatMP } from '../utils/calculations';
 import { OCCUPIED_MONEY_INCOME, INTEGRATED_MONEY_INCOME, OCCUPIED_MP_INCOME, INTEGRATED_MP_INCOME, getResearchTierForGDP } from '../data/research';
 
 type Props = { gameState: GameState; onClose: () => void };
@@ -16,7 +16,7 @@ export default function DailyUpdate({ gameState, onClose }: Props) {
         </div>
         <div className="daily-update-list">
           {alive.map(c => {
-            const dailyIncome = calculateDailyIncome(c);
+            const dailyIncome = c.dailyIncome;
             const occCount = c.capturedTerritories.filter(t => t.status === 'occupied').length;
             const intCount = c.capturedTerritories.filter(t => t.status === 'integrated').length;
             const territoryIncome = occCount * OCCUPIED_MONEY_INCOME + intCount * INTEGRATED_MONEY_INCOME;
@@ -27,7 +27,7 @@ export default function DailyUpdate({ gameState, onClose }: Props) {
               .filter(b => (b.attackerId === c.id || b.defenderId === c.id) && b.day === gameState.gameDay)
               .reduce((s, b) => s + (b.attackerId === c.id ? b.mpLostAttacker : b.mpLostDefender), 0);
 
-            const newMoney = c.money + dailyIncome.value + territoryIncome - totalExpenses;
+            const newMoney = c.money + dailyIncome + territoryIncome - totalExpenses;
             const newMP = c.mp + c.dailyMP + territoryMP - dayMPLoss;
 
             return (
@@ -35,7 +35,7 @@ export default function DailyUpdate({ gameState, onClose }: Props) {
                 <h4>{c.flag} {c.name}</h4>
                 <div className="du-row">
                   <span>MONEY: {formatMoney(c.money)}</span>
-                  <span>+{formatMoney(dailyIncome.value)} income</span>
+                  <span>+{formatMoney(dailyIncome)} income</span>
                   {territoryIncome > 0 && <span>+{formatMoney(territoryIncome)} territory</span>}
                   {totalExpenses > 0 && <span>-{formatMoney(totalExpenses)} expenses</span>}
                   <span>= <strong>{formatMoney(newMoney)}</strong></span>

@@ -32,7 +32,7 @@ export const RESEARCH_TIERS: ResearchTier[] = [
   },
   {
     tier: 5,
-    gdpRange: [100, 999],
+    gdpRange: [100, Infinity],
     label: 'Supreme',
     items: ['Top Military', 'Strategic Weapons', 'Advanced Aircraft', 'Global Trade', 'Top Navy'],
   },

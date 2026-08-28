@@ -53,7 +53,7 @@ export default function HistoryViewer({ gameState, onClose }: Props) {
 
         <div className="history-section">
           <h3>Battle History ({gameState.allBattles.length})</h3>
-          {gameState.allBattles.sort((a, b) => a.day - b.day).map(b => (
+          {[...gameState.allBattles].sort((a, b) => a.day - b.day).map(b => (
             <div key={b.id} className="history-battle-item">
               <span>Day {b.day}</span>
               <span>{getCountryName(b.attackerId)} vs {getCountryName(b.defenderId)}</span>

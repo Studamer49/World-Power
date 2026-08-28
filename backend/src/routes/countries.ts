@@ -89,20 +89,37 @@ router.post('/', requireAdmin, async (req, res) => {
   }
 });
 
-// PATCH /:id - Update country
+// PATCH /:id - Update country (admin)
 router.patch('/:id', requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
-    const updateData = req.body;
+    const body = req.body || {};
+
+    // Only allow specific fields to be updated. The country schema maps exactly
+    // to these (all in the Prisma model), preventing arbitrary payloads.
+    const allowed = [
+      'name', 'flag', 'playerName', 'leaderName', 'governmentName',
+      'money', 'mp', 'gdp', 'dailyIncome', 'dailyMP',
+      'alive', 'militaryUnits', 'unitInventory', 'manualOverrides', 'completedResearch',
+      'color',
+    ];
+    const updateData: Record<string, any> = {};
+    for (const field of allowed) {
+      if (field in body) updateData[field] = body[field];
+    }
+    if (Object.keys(updateData).length === 0) {
+      res.status(400).json({ error: 'Nothing to update' });
+      return;
+    }
 
     // Stringify JSON fields if they exist
-    if (updateData.unitInventory) {
+    if (updateData.unitInventory !== undefined) {
       updateData.unitInventory = JSON.stringify(updateData.unitInventory);
     }
-    if (updateData.manualOverrides) {
+    if (updateData.manualOverrides !== undefined) {
       updateData.manualOverrides = JSON.stringify(updateData.manualOverrides);
     }
-    if (updateData.completedResearch) {
+    if (updateData.completedResearch !== undefined) {
       updateData.completedResearch = JSON.stringify(updateData.completedResearch);
     }
 
@@ -237,7 +254,7 @@ router.post('/:id/password', requireAdmin, async (req, res) => {
       where: { id },
       data: { password },
     });
-    res.json({ success: true, id: country.id, password: country.password });
+    res.json({ success: true, id: country.id });
   } catch (error) {
     console.error('Error setting country password:', error);
     res.status(500).json({ error: 'Failed to set country password' });
