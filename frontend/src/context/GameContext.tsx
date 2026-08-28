@@ -749,6 +749,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     let cancelled = false;
     (async () => {
       try {
+        await new Promise(r => setTimeout(r, 1200));
         const { data } = await gameStateApi.get();
         if (cancelled) return;
         if (data) {
