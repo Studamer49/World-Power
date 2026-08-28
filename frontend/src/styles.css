@@ -285,6 +285,8 @@ select.input-sm{cursor:pointer}
 .success-text{color:var(--success);font-size:10px;margin-top:4px}
 .notes-login{display:flex;flex-direction:column;gap:8px;padding:8px 0}
 .notes-login.inline{flex-direction:row;align-items:center;flex-wrap:wrap}
+.notes-authbar{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);margin-bottom:4px}
+.self-edit-box{display:flex;flex-direction:column;gap:6px;padding:10px;margin-top:8px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius)}
 .notes-compose{display:flex;flex-direction:column;gap:6px;padding:8px 0;border-bottom:1px solid var(--border)}
 .notes-list{margin-top:8px}
 .note-group{margin-bottom:16px}

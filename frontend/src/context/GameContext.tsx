@@ -296,6 +296,29 @@ function gameReducer(state: GameState, action: GameAction): GameState {
           mp: newCountries[battle.attackerId].mp - battle.mpLostAttacker,
           battles: [...newCountries[battle.attackerId].battles, battle.id],
         };
+        // If the battle captured a territory, record it so it appears in the territory
+        // list and capture history (and stays renameable in sync).
+        if (battle.territoryCaptured && battle.territoryName) {
+          const attacker = newCountries[battle.attackerId];
+          const newTerritory = {
+            id: generateId(),
+            name: battle.territoryName,
+            owner: battle.attackerId,
+            capturingCountryId: battle.attackerId,
+            capturedOnDay: battle.day,
+            capturedOnDate: battle.date,
+            status: 'occupied' as const,
+            moneyIncome: OCCUPIED_MONEY_INCOME,
+          };
+          newCountries[battle.attackerId] = {
+            ...attacker,
+            capturedTerritories: [...(attacker.capturedTerritories || []), newTerritory],
+            territoryCaptureHistory: [
+              ...(attacker.territoryCaptureHistory || []),
+              { day: battle.day, date: battle.date, territories: [{ name: battle.territoryName, fromCountryId: battle.defenderId }] },
+            ],
+          };
+        }
       }
       if (newCountries[battle.defenderId]) {
         newCountries[battle.defenderId] = {

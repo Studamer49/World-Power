@@ -25,6 +25,9 @@ import PublicCountryDetail from './components/PublicCountryDetail';
 import AdminLogin from './components/AdminLogin';
 import NotesPanel from './components/NotesPanel';
 import AdminNotes from './components/AdminNotes';
+import CountryLoginModal from './components/CountryLoginModal';
+import { useAuth } from './context/AuthContext';
+import { getFlagEmoji } from './data/flags';
 
 type Modal =
   | null
@@ -282,10 +285,15 @@ function AdminView() {
 
 function PublicView() {
   const { gameState, loading, error } = useGameData();
+  const { countryName, loggedIn, logoutCountry } = useAuth();
   const [selectedCountryId, setSelectedCountryId] = useState<string | null>(null);
   const [showNotes, setShowNotes] = useState(false);
+  const [showCountryLogin, setShowCountryLogin] = useState(false);
 
   const country = selectedCountryId && gameState ? gameState.countries[selectedCountryId] : null;
+  const loggedCountry = loggedIn && countryName && gameState
+    ? Object.values(gameState.countries).find(c => c.name === countryName) || null
+    : null;
 
   if (loading) {
     return (
@@ -337,8 +345,21 @@ function PublicView() {
           </div>
         </div>
         <div className="header-right">
-          <button className="btn btn-sm btn-ghost" onClick={() => setShowNotes(true)}>MESSAGES</button>
+          {loggedIn && loggedCountry ? (
+            <button className="btn btn-sm btn-accent" onClick={() => setShowNotes(true)}>
+              {getFlagEmoji(loggedCountry.name)} {loggedCountry.name} &#9679; MESSAGES
+            </button>
+          ) : (
+            <button className="btn btn-sm btn-ghost" onClick={() => setShowNotes(true)}>MESSAGES</button>
+          )}
           <button className="btn btn-sm btn-ghost" onClick={() => navigateTo('/admin/login')}>GAME MASTER</button>
+          {loggedIn && loggedCountry ? (
+            <button className="btn btn-sm" onClick={logoutCountry}>
+              LOGOUT {getFlagEmoji(loggedCountry.name)} {loggedCountry.name}
+            </button>
+          ) : (
+            <button className="btn btn-sm" onClick={() => setShowCountryLogin(true)}>LOGIN</button>
+          )}
         </div>
       </header>
 
@@ -364,6 +385,9 @@ function PublicView() {
 
       {showNotes && gameState && (
         <NotesPanel gameState={gameState} onClose={() => setShowNotes(false)} />
+      )}
+      {showCountryLogin && gameState && (
+        <CountryLoginModal gameState={gameState} onClose={() => setShowCountryLogin(false)} />
       )}
     </div>
   );

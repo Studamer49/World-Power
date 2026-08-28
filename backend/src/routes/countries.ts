@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import prisma from '../prisma';
-import { requireAdmin } from '../middleware/auth';
+import { requireAdmin, requireCountry } from '../middleware/auth';
 
 const router = Router();
 
@@ -160,6 +160,67 @@ router.post('/:id/dead', requireAdmin, async (req, res) => {
   } catch (error) {
     console.error('Error toggling country status:', error);
     res.status(500).json({ error: 'Failed to toggle country status' });
+  }
+});
+
+// PATCH /:id/self - A logged-in country may only edit its own profile fields
+// (player name, leader name, government name, flag). Sensitive values like
+// money, MP, research and income are intentionally NOT allowed here.
+router.patch('/:id/self', requireCountry, async (req: any, res) => {
+  try {
+    const { id } = req.params;
+    if (req.countryId !== id) {
+      res.status(403).json({ error: 'You can only edit your own country' });
+      return;
+    }
+
+    const allowed = ['playerName', 'leaderName', 'governmentName', 'flag'];
+    const updateData: Record<string, string> = {};
+    for (const field of allowed) {
+      if (typeof req.body[field] === 'string') {
+        updateData[field] = (req.body[field] as string).trim();
+      }
+    }
+    if (Object.keys(updateData).length === 0) {
+      res.status(400).json({ error: 'Nothing to update' });
+      return;
+    }
+
+    const country = await prisma.country.update({
+      where: { id },
+      data: updateData,
+    });
+
+    // Also update the GameState blob (single source of truth for the public view)
+    // so profile edits made by the country show up immediately. The blob uses its
+    // own country ids, so match by name.
+    try {
+      const gs = await prisma.gameState.findUnique({ where: { id: 'default' } });
+      if (gs) {
+        const parsed = JSON.parse(gs.data || '{}') as { countries?: Record<string, any> };
+        const blobCountries = parsed.countries ? Object.entries(parsed.countries) : [];
+        const idx = blobCountries.findIndex(([, cc]) => cc.name === country.name);
+        if (idx >= 0) {
+          const [blobId, cc] = blobCountries[idx];
+          parsed.countries![blobId] = { ...cc, ...updateData };
+          await prisma.gameState.update({ where: { id: 'default' }, data: { data: JSON.stringify(parsed) } });
+        }
+      }
+    } catch (e) {
+      console.error('Error syncing country profile to game state:', e);
+    }
+
+    const parsed = {
+      ...country,
+      password: undefined,
+      unitInventory: JSON.parse(country.unitInventory),
+      manualOverrides: country.manualOverrides ? JSON.parse(country.manualOverrides) : null,
+      completedResearch: JSON.parse(country.completedResearch),
+    };
+    res.json(parsed);
+  } catch (error) {
+    console.error('Error updating country profile:', error);
+    res.status(500).json({ error: 'Failed to update country profile' });
   }
 });
 

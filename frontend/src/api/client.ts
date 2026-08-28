@@ -22,15 +22,42 @@ export function isAdmin(): boolean {
   return !!getAuthToken();
 }
 
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+// ---- Country session (per-country login) ----
+const COUNTRY_TOKEN_KEY = 'wp-country-token';
+const COUNTRY_ID_KEY = 'wp-country-id';
+
+export function setCountrySession(token: string, countryId: string) {
+  localStorage.setItem(COUNTRY_TOKEN_KEY, token);
+  localStorage.setItem(COUNTRY_ID_KEY, countryId);
+}
+
+export function clearCountrySession() {
+  localStorage.removeItem(COUNTRY_TOKEN_KEY);
+  localStorage.removeItem(COUNTRY_ID_KEY);
+}
+
+export function getCountryToken(): string | null {
+  return localStorage.getItem(COUNTRY_TOKEN_KEY);
+}
+
+export function getCountryId(): string | null {
+  return localStorage.getItem(COUNTRY_ID_KEY);
+}
+
+// request accepts an optional token. Defaults to the admin token when absent.
+async function request<T>(path: string, options: RequestInit = {}, tokenOverride?: string | null): Promise<T> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(options.headers as Record<string, string> || {}),
   };
 
-  const token = getAuthToken();
+  const token = tokenOverride !== undefined ? tokenOverride : getAuthToken();
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  if (tokenOverride === null) {
+    delete headers['Authorization'];
   }
 
   const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
@@ -66,6 +93,7 @@ export const countriesApi = {
   delete: (id: string) => request<void>(`/api/countries/${id}`, { method: 'DELETE' }),
   toggleDead: (id: string) => request<any>(`/api/countries/${id}/dead`, { method: 'POST' }),
   setPassword: (id: string, password: string) => request<any>(`/api/countries/${id}/password`, { method: 'POST', body: JSON.stringify({ password }) }),
+  updateSelf: (id: string, data: any) => request<any>(`/api/countries/${id}/self`, { method: 'PATCH', body: JSON.stringify(data) }, getCountryToken()),
 };
 
 // Battles
@@ -131,7 +159,7 @@ export const mpChangesApi = {
 export const notesApi = {
   list: (countryId?: string) => request<any[]>(`/api/notes${countryId ? `?countryId=${countryId}` : ''}`),
   listAll: () => request<any[]>('/api/notes/all'),
-  create: (data: any) => request<any>('/api/notes', { method: 'POST', body: JSON.stringify(data) }),
+  create: (data: any) => request<any>('/api/notes', { method: 'POST', body: JSON.stringify(data) }, getCountryToken()),
   reply: (id: string, data: any) => request<any>(`/api/notes/${id}/reply`, { method: 'POST', body: JSON.stringify(data) }),
   delete: (id: string) => request<void>(`/api/notes/${id}`, { method: 'DELETE' }),
 };
@@ -144,6 +172,7 @@ export const snapshotsApi = {
 
 // Auth
 export const authApi = {
-  login: (password: string) => request<{ token: string }>('/api/auth/login', { method: 'POST', body: JSON.stringify({ password }) }),
-  verify: () => request<{ valid: boolean }>('/api/auth/verify'),
+  login: (password: string) => request<{ token: string; role: string }>('/api/auth/login', { method: 'POST', body: JSON.stringify({ password }) }),
+  countryLogin: (country: string, password: string) => request<{ token: string; role: string; countryId: string; countryName: string }>('/api/auth/country-login', { method: 'POST', body: JSON.stringify({ countryName: country, password }) }),
+  verify: () => request<{ valid: boolean; role?: 'admin' | 'country'; countryId?: string }>('/api/auth/verify'),
 };

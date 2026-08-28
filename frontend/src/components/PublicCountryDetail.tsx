@@ -1,7 +1,10 @@
+import { useState } from 'react';
 import { Country, GameState } from '../types';
 import { formatMoney, calculateMilitaryPower } from '../utils/calculations';
 import { RESEARCH_TIERS, getResearchTierForGDP, ECONOMIC_INVESTMENT_GDP_CAP, OCCUPIED_MONEY_INCOME, INTEGRATED_MONEY_INCOME, OCCUPATION_DAYS } from '../data/research';
 import { ALL_UNIT_IDS, UNIT_NAMES, getUnitRatio } from '../data/militaryUnits';
+import { countriesApi } from '../api/client';
+import { useAuth } from '../context/AuthContext';
 
 type Props = {
   country: Country;
@@ -13,6 +16,49 @@ type Props = {
 export default function PublicCountryDetail({ country, allCountries, gameState, onBack }: Props) {
   const c = country;
   const config = gameState.militaryConfig;
+  const { countryName } = useAuth();
+  const canEdit = !!countryName && countryName === c.name;
+
+  const [editing, setEditing] = useState(false);
+  const [form, setForm] = useState({ playerName: '', leaderName: '', governmentName: '', flag: '' });
+  const [saveMsg, setSaveMsg] = useState('');
+  const [saveErr, setSaveErr] = useState('');
+
+  const startEdit = () => {
+    setForm({
+      playerName: c.playerName || '',
+      leaderName: c.leaderName || '',
+      governmentName: c.governmentName || '',
+      flag: c.flag || '',
+    });
+    setSaveMsg('');
+    setSaveErr('');
+    setEditing(true);
+  };
+
+  const saveProfile = async () => {
+    setSaveMsg('');
+    setSaveErr('');
+    try {
+      const updated = await countriesApi.updateSelf(c.id, {
+        playerName: form.playerName,
+        leaderName: form.leaderName,
+        governmentName: form.governmentName,
+        flag: form.flag,
+      });
+      setSaveMsg('Profile updated.');
+      setEditing(false);
+      // Reflect changes in the local (game-state) copy rendered above.
+      if (gameState.countries[c.id]) {
+        gameState.countries[c.id].playerName = updated.playerName || form.playerName;
+        gameState.countries[c.id].leaderName = updated.leaderName || form.leaderName;
+        gameState.countries[c.id].governmentName = updated.governmentName || form.governmentName;
+        gameState.countries[c.id].flag = updated.flag || form.flag;
+      }
+    } catch (e: any) {
+      setSaveErr(e.message || 'Failed to update profile');
+    }
+  };
 
   const occupiedTerrCount = c.capturedTerritories.filter(t => t.status === 'occupied').length;
   const integratedTerrCount = c.capturedTerritories.filter(t => t.status === 'integrated').length;
@@ -58,6 +104,31 @@ export default function PublicCountryDetail({ country, allCountries, gameState, 
             <span className="field-label">Date Created</span>
             <span className="field-value">{c.dateCreated || '\u2014'}</span>
           </div>
+          {canEdit && !editing && (
+            <div className="center-row" style={{ marginTop: 8 }}>
+              <button className="btn btn-sm btn-accent" onClick={startEdit}>EDIT PROFILE</button>
+            </div>
+          )}
+          {canEdit && editing && (
+            <div className="self-edit-box">
+              <h4>Edit Profile</h4>
+              <label className="field-label">Flag (emoji)</label>
+              <input className="input-sm full-width" value={form.flag} onChange={e => setForm({ ...form, flag: e.target.value })} />
+              <label className="field-label">Player</label>
+              <input className="input-sm full-width" value={form.playerName} onChange={e => setForm({ ...form, playerName: e.target.value })} />
+              <label className="field-label">Leader</label>
+              <input className="input-sm full-width" value={form.leaderName} onChange={e => setForm({ ...form, leaderName: e.target.value })} />
+              <label className="field-label">Government</label>
+              <input className="input-sm full-width" value={form.governmentName} onChange={e => setForm({ ...form, governmentName: e.target.value })} />
+              {saveErr && <p className="text-danger">{saveErr}</p>}
+              {saveMsg && <p className="text-success">{saveMsg}</p>}
+              <div className="center-row">
+                <button className="btn btn-success" onClick={saveProfile}>SAVE</button>
+                <button className="btn btn-ghost" onClick={() => setEditing(false)}>CANCEL</button>
+              </div>
+              <p className="text-muted">You may only edit your own country's profile. Money and military values are controlled by the Game Master.</p>
+            </div>
+          )}
         </section>
 
         <section className="detail-section">

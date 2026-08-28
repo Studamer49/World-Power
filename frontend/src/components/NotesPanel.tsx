@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { GameState } from '../types';
 import { notesApi } from '../api/client';
 import { getFlagEmoji } from '../data/flags';
+import { useAuth } from '../context/AuthContext';
+import CountryLoginModal from './CountryLoginModal';
 
 type Props = {
   gameState: GameState;
@@ -9,9 +11,8 @@ type Props = {
 };
 
 export default function NotesPanel({ gameState, onClose }: Props) {
-  const [countryId, setCountryId] = useState('');
-  const [password, setPassword] = useState('');
-  const [loggedIn, setLoggedIn] = useState(false);
+  const { countryId, countryName, loggedIn, logoutCountry } = useAuth();
+  const [showLogin, setShowLogin] = useState(false);
   const [notes, setNotes] = useState<any[]>([]);
   const [text, setText] = useState('');
   const [replyTarget, setReplyTarget] = useState<string | null>(null);
@@ -20,9 +21,9 @@ export default function NotesPanel({ gameState, onClose }: Props) {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const countries = Object.values(gameState.countries).filter(c => c.alive);
-
-  const currentCountry = countryId ? gameState.countries[countryId] : null;
+  const currentCountry = countryName
+    ? Object.values(gameState.countries).find(c => c.name === countryName) || null
+    : null;
 
   const loadNotes = useCallback(async (cid: string) => {
     try {
@@ -36,25 +37,14 @@ export default function NotesPanel({ gameState, onClose }: Props) {
     }
   }, []);
 
-  const handleLogin = async () => {
-    setError('');
-    setMessage('');
-    if (!currentCountry) return;
-    try {
-      const check = await notesApi.list(countryId);
-      if (!currentCountry.password) {
-        setError('This country does not have a password set yet. Contact the Game Master.');
-        return;
-      }
-      // Verify password by attempting an authenticated operation isn't possible without creating a note,
-      // so we validate locally against the returned (stripped) data. Instead, we rely on the create
-      // endpoint to reject invalid passwords. For read access we just require a password to be present.
-      setLoggedIn(true);
-      setNotes(check);
-    } catch (e: any) {
-      setError(e.message || 'Failed to verify country');
+  // Load this country's messages once we are logged in.
+  useEffect(() => {
+    if (loggedIn && countryId) {
+      loadNotes(countryId);
+    } else if (!loggedIn) {
+      setNotes([]);
     }
-  };
+  }, [loggedIn, countryId, loadNotes]);
 
   const handleSubmit = async () => {
     if (!text.trim()) return;
@@ -64,13 +54,12 @@ export default function NotesPanel({ gameState, onClose }: Props) {
       const note = await notesApi.create({
         countryId,
         text,
-        password,
         day: gameState.gameDay,
         date: gameState.gameDate,
         author: currentCountry?.name,
       });
       setText('');
-      await loadNotes(countryId);
+      await loadNotes(countryId!);
       setMessage('Note posted.');
     } catch (e: any) {
       setError(e.message || 'Failed to post note');
@@ -85,7 +74,6 @@ export default function NotesPanel({ gameState, onClose }: Props) {
       await notesApi.create({
         countryId,
         text: replyText,
-        password,
         day: gameState.gameDay,
         date: gameState.gameDate,
         author: currentCountry?.name,
@@ -93,11 +81,18 @@ export default function NotesPanel({ gameState, onClose }: Props) {
       });
       setReplyText('');
       setReplyTarget(null);
-      await loadNotes(countryId);
+      await loadNotes(countryId!);
       setMessage('Reply posted.');
     } catch (e: any) {
       setError(e.message || 'Failed to post reply');
     }
+  };
+
+  const handleLogout = () => {
+    logoutCountry();
+    setNotes([]);
+    setMessage('');
+    setError('');
   };
 
   const renderNote = (note: any) => (
@@ -128,11 +123,11 @@ export default function NotesPanel({ gameState, onClose }: Props) {
           <button className="btn btn-sm" onClick={() => handleReply(note.id)}>Send</button>
         </div>
       )}
-          {note.replies && note.replies.length > 0 && (
-            <div className="note-replies">
-              {note.replies.map((r: any) => renderNote(r))}
-            </div>
-          )}
+      {note.replies && note.replies.length > 0 && (
+        <div className="note-replies">
+          {note.replies.map((r: any) => renderNote(r))}
+        </div>
+      )}
     </div>
   );
 
@@ -146,36 +141,22 @@ export default function NotesPanel({ gameState, onClose }: Props) {
 
         {!loggedIn ? (
           <div className="notes-login">
-            <p className="text-muted">Select the country you represent and enter its password to view and send messages to the Game Master.</p>
-            <label className="field-label">Country</label>
-            <select
-              className="input"
-              value={countryId}
-              onChange={e => setCountryId(e.target.value)}
-            >
-              <option value="">-- Select country --</option>
-              {countries.map(c => (
-                <option key={c.id} value={c.id}>{getFlagEmoji(c.name)} {c.name}</option>
-              ))}
-            </select>
-            <label className="field-label">Country Password</label>
-            <input
-              className="input"
-              type="password"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              placeholder="Enter this country's password"
-            />
-            {error && <div className="error-text">{error}</div>}
+            <p className="text-muted">
+              Log in with your country's password to view and send messages to the Game Master.
+            </p>
             <div className="center-row">
-              <button className="btn btn-accent" onClick={handleLogin} disabled={!countryId || !password}>CONTINUE</button>
+              <button className="btn btn-accent" onClick={() => setShowLogin(true)}>LOG IN AS MY COUNTRY</button>
             </div>
+            {showLogin && (
+              <CountryLoginModal gameState={gameState} onClose={() => setShowLogin(false)} />
+            )}
           </div>
         ) : (
           <div className="notes-view">
-            <p className="text-muted">
-              Logged in as <strong>{currentCountry?.name}</strong>.
-            </p>
+            <div className="notes-authbar">
+              <strong>{currentCountry ? `${getFlagEmoji(currentCountry.name)} ${currentCountry.name}` : 'Logged in'}</strong>
+              <button className="btn btn-xs btn-ghost" onClick={handleLogout}>LOGOUT</button>
+            </div>
             <div className="notes-compose">
               <textarea
                 className="input"

@@ -1,6 +1,6 @@
 import { Router, Request } from 'express';
 import prisma from '../prisma';
-import { requireAdmin } from '../middleware/auth';
+import { requireAdmin, getToken, verifyToken } from '../middleware/auth';
 
 const router = Router();
 
@@ -43,10 +43,15 @@ router.get('/all', requireAdmin, async (_req, res) => {
   }
 });
 
-// POST - Create a note (public: must provide countryId + password matching the country)
-router.post('/', async (req, res) => {
+// POST - Create a note. Identity is verified either by a valid country token
+// (Authorization header) or by providing the country's password in the body.
+router.post('/', requireCountryOptional, async (req: any, res) => {
   try {
-    const { countryId, text, day, date, password, author, replyToId } = req.body;
+    // If a signed-in country token is present, its country id (relational table id)
+    // is the authoritative identity, regardless of what the client sends.
+    const countryId = req.countryId || req.body.countryId;
+
+    const { text, day, date, password, author, replyToId } = req.body;
 
     const country = await prisma.country.findUnique({ where: { id: countryId } });
     if (!country) {
@@ -59,7 +64,16 @@ router.post('/', async (req, res) => {
       return;
     }
 
-    if (password !== country.password) {
+    // Allow either a signed-in country token or the raw password to prove identity.
+    let identityVerified = false;
+    const token = getToken(req);
+    if (token) {
+      const payload = verifyToken(token);
+      if (payload && payload.role === 'country' && payload.countryId === country.id) {
+        identityVerified = true;
+      }
+    }
+    if (!identityVerified && password !== country.password) {
       res.status(401).json({ error: 'Invalid country password' });
       return;
     }
@@ -72,7 +86,7 @@ router.post('/', async (req, res) => {
     // Validate that replyToId belongs to the same country
     if (replyToId) {
       const parent = await prisma.note.findUnique({ where: { id: replyToId } });
-      if (!parent || parent.countryId !== countryId) {
+      if (!parent || parent.countryId !== country.id) {
         res.status(400).json({ error: 'Invalid reply target' });
         return;
       }
@@ -80,7 +94,7 @@ router.post('/', async (req, res) => {
 
     const note = await prisma.note.create({
       data: {
-        countryId,
+        countryId: country.id,
         text: text.trim(),
         day: day || 0,
         date: date || '',
@@ -95,6 +109,18 @@ router.post('/', async (req, res) => {
     res.status(500).json({ error: 'Failed to create note' });
   }
 });
+
+// Optional country auth: attaches countryId only when a valid country token is present.
+function requireCountryOptional(req: Request, res: any, next: any) {
+  const token = getToken(req);
+  if (token) {
+    const payload = verifyToken(token);
+    if (payload && payload.role === 'country' && payload.countryId) {
+      (req as any).countryId = payload.countryId;
+    }
+  }
+  next();
+}
 
 // POST /:id/reply - GM replies to a note
 router.post('/:id/reply', requireAdmin, async (req: any, res) => {
