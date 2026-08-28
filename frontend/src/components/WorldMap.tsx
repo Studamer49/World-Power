@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback } from 'react';
 import { GameState, Country } from '../types';
 import { getFlagEmoji } from '../data/flags';
+import { COUNTRY_GEO, project, WORLD_MAP_PATH } from '../data/worldMap';
 import { formatMoney } from '../utils/calculations';
 import { getResearchTierForGDP } from '../data/research';
 
@@ -11,25 +12,12 @@ type Props = {
 
 type NodePos = { x: number; y: number };
 
-const DEFAULT_POSITIONS: Record<string, NodePos> = {
-  'Sweden': { x: 480, y: 100 },
-  'Mongolia': { x: 680, y: 160 },
-  'USA': { x: 180, y: 180 },
-  'China': { x: 680, y: 220 },
-  'Russia': { x: 580, y: 100 },
-  'Argentina': { x: 250, y: 400 },
-  'Israel': { x: 530, y: 250 },
-  'North Korea': { x: 750, y: 180 },
-  'Australia': { x: 740, y: 380 },
-  'Nigeria': { x: 460, y: 310 },
-};
-
 function getNodeColor(country: Country): string {
   if (!country.alive) return '#3a1a1a';
   const totalTerrs = country.capturedTerritories.length;
   if (totalTerrs > 5) return '#1a3a1a';
   if (totalTerrs > 2) return '#1a2a3a';
-  return '#1e2030';
+  return 'transparent';
 }
 
 function getBorderColor(country: Country): string {
@@ -42,12 +30,12 @@ function getBorderColor(country: Country): string {
 
 export default function WorldMap({ gameState, onSelectCountry }: Props) {
   const countries = Object.values(gameState.countries);
-  const alive = countries.filter(c => c.alive);
 
   const [positions, setPositions] = useState<Record<string, NodePos>>(() => {
     const pos: Record<string, NodePos> = {};
     for (const c of countries) {
-      pos[c.id] = DEFAULT_POSITIONS[c.name] || { x: 400 + Math.random() * 200, y: 200 + Math.random() * 200 };
+      const geo = COUNTRY_GEO[c.name];
+      pos[c.id] = geo ? project(geo.lat, geo.lon) : { x: 500, y: 250 };
     }
     return pos;
   });
@@ -137,13 +125,26 @@ export default function WorldMap({ gameState, onSelectCountry }: Props) {
         onMouseDown={handleBackgroundMouseDown}
       >
         <g transform={`translate(${pan.x}, ${pan.y}) scale(${zoom})`}>
-          {/* Grid background */}
-          {Array.from({ length: 50 }, (_, i) => (
-            <line key={`h${i}`} x1={0} y1={i * 50} x2={1000} y2={i * 50} stroke="#1e2030" strokeWidth={0.5} />
-          ))}
-          {Array.from({ length: 20 }, (_, i) => (
-            <line key={`v${i}`} x1={i * 50} y1={0} x2={i * 50} y2={500} stroke="#1e2030" strokeWidth={0.5} />
-          ))}
+          <rect x={0} y={0} width={1000} height={500} fill="#0b1026" />
+
+          {/* World map continents */}
+          <path
+            d={WORLD_MAP_PATH}
+            fill="#1c2e44"
+            stroke="#2f4d6e"
+            strokeWidth={1}
+            opacity={0.9}
+          />
+
+          {/* Graticule lines */}
+          {[-120, -60, 0, 60, 120].map(lon => {
+            const { x } = project(0, lon);
+            return <line key={`m${lon}`} x1={x} y1={0} x2={x} y2={500} stroke="#12203a" strokeWidth={0.5} />;
+          })}
+          {[-60, 0, 60].map(lat => {
+            const { y } = project(lat, 0);
+            return <line key={`p${lat}`} x1={0} y1={y} x2={1000} y2={y} stroke="#12203a" strokeWidth={0.5} />;
+          })}
 
           {/* Connection lines for wars */}
           {Object.values(gameState.wars).filter(w => w.status === 'active').map(war => {
@@ -161,7 +162,7 @@ export default function WorldMap({ gameState, onSelectCountry }: Props) {
                       stroke="#e55454"
                       strokeWidth={1.5}
                       strokeDasharray="6,4"
-                      opacity={0.5}
+                      opacity={0.6}
                     />
                   );
                 }
@@ -186,7 +187,7 @@ export default function WorldMap({ gameState, onSelectCountry }: Props) {
                       stroke="#3ecf8e"
                       strokeWidth={1}
                       strokeDasharray="4,4"
-                      opacity={0.4}
+                      opacity={0.5}
                     />
                   );
                 }
@@ -195,55 +196,71 @@ export default function WorldMap({ gameState, onSelectCountry }: Props) {
             return lines;
           })}
 
-          {/* Country nodes */}
+          {/* Country flag markers */}
           {countries.map(c => {
             const pos = positions[c.id];
             if (!pos) return null;
             const isSelected = selectedId === c.id;
             const isHovered = hoveredId === c.id;
-            const nodeW = 120;
-            const nodeH = 70;
+            const border = getBorderColor(c);
 
             return (
               <g
                 key={c.id}
-                transform={`translate(${pos.x - nodeW / 2}, ${pos.y - nodeH / 2})`}
+                transform={`translate(${pos.x}, ${pos.y})`}
                 onMouseDown={e => handleMouseDown(e, c.id)}
                 onMouseEnter={() => setHoveredId(c.id)}
                 onMouseLeave={() => setHoveredId(null)}
                 onClick={e => { e.stopPropagation(); handleClick(c.id); }}
                 onDoubleClick={e => { e.stopPropagation(); handleDoubleClick(c.id); }}
                 style={{ cursor: dragging === c.id ? 'grabbing' : 'grab' }}
+                opacity={c.alive ? 1 : 0.55}
               >
-                <rect
-                  width={nodeW}
-                  height={nodeH}
-                  rx={4}
-                  fill={getNodeColor(c)}
-                  stroke={isSelected ? '#4a7dff' : getBorderColor(c)}
-                  strokeWidth={isSelected ? 2.5 : isHovered ? 2 : 1}
-                  opacity={c.alive ? 1 : 0.5}
+                {/* Anchor pin */}
+                <line x1={0} y1={0} x2={0} y2={14} stroke="#666d8a" strokeWidth={2} />
+                <circle cx={0} cy={14} r={2.5} fill="#8890a4" />
+
+                {/* Flag shield */}
+                <circle
+                  cx={0}
+                  cy={0}
+                  r={16}
+                  fill="#111827"
+                  stroke={isSelected ? '#4a7dff' : border}
+                  strokeWidth={isSelected ? 3 : isHovered ? 2.5 : 2}
                 />
-                <text x={nodeW / 2} y={16} textAnchor="middle" fill="#c8cad8" fontSize={11} fontWeight={700}>
-                  {getFlagEmoji(c.name)} {c.name}
+                <circle cx={0} cy={0} r={13} fill={getNodeColor(c)} />
+                <text x={0} y={7} textAnchor="middle" fontSize={16}>
+                  {getFlagEmoji(c.name)}
                 </text>
-                <text x={nodeW / 2} y={32} textAnchor="middle" fill="#8890a4" fontSize={9}>
-                  {formatMoney(c.money)} | {formatMoney(c.mp)} MP
-                </text>
-                <text x={nodeW / 2} y={44} textAnchor="middle" fill="#8890a4" fontSize={9}>
-                  GDP: {c.gdp} | T{getResearchTierForGDP(c.gdp)}
-                </text>
-                <text x={nodeW / 2} y={56} textAnchor="middle" fill="#8890a4" fontSize={9}>
-                  Terr: {c.capturedTerritories.length} | {c.alive ? 'ALIVE' : 'DEAD'}
-                </text>
+
+                {/* Territory count chip */}
                 {c.capturedTerritories.length > 0 && (
-                  <circle cx={nodeW - 8} cy={8} r={6} fill="#3ecf8e" />
+                  <g>
+                    <circle cx={14} cy={-14} r={8} fill="#3ecf8e" stroke="#0b1026" strokeWidth={1.5} />
+                    <text x={14} y={-11} textAnchor="middle" fill="#000" fontSize={9} fontWeight={700}>
+                      {c.capturedTerritories.length}
+                    </text>
+                  </g>
                 )}
-                {c.capturedTerritories.length > 0 && (
-                  <text x={nodeW - 8} y={11} textAnchor="middle" fill="#000" fontSize={8} fontWeight={700}>
-                    {c.capturedTerritories.length}
+
+                {/* Name label */}
+                <g transform={`translate(22, -4)`}>
+                  <rect
+                    x={-3}
+                    y={-8}
+                    width={94}
+                    height={16}
+                    rx={3}
+                    fill="#0b1026"
+                    stroke={border}
+                    strokeWidth={0.8}
+                    opacity={0.95}
+                  />
+                  <text x={44} y={4} textAnchor="middle" fill="#e6e9f5" fontSize={10} fontWeight={700}>
+                    {getFlagEmoji(c.name)} {c.name}
                   </text>
-                )}
+                </g>
               </g>
             );
           })}
