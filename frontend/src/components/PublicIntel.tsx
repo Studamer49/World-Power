@@ -18,7 +18,7 @@ export default function PublicIntel({ gameState, onSelectCountry }: Props) {
 
   const wars = Object.values(gameState.wars).sort((a, b) => b.startDay - a.startDay);
   const nameOf = (id: string) => gameState.countries[id]?.name || '???';
-  const flagsOf = (id: string) => getFlagEmoji(gameState.countries[id]?.name);
+  const flagsOf = (id: string) => (gameState.countries[id] ? getFlagEmoji(gameState.countries[id].name) : '\u{1F30D}');
   const getWarScoreEvents = (warId: string) => gameState.warScoreEvents.filter(e => e.warId === warId);
 
   return (

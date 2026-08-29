@@ -250,10 +250,26 @@ router.post('/:id/password', requireAdmin, async (req, res) => {
       res.status(400).json({ error: 'Password required' });
       return;
     }
-    const country = await prisma.country.update({
-      where: { id },
-      data: { password },
-    });
+    // The GameState blob uses its own id namespace. If the id doesn't match a
+    // relational Country directly, resolve it by name (names are stable across
+    // both systems) so admins can set passwords using blob country ids.
+    let country = await prisma.country.findUnique({ where: { id } });
+    if (country) {
+      country = await prisma.country.update({
+        where: { id },
+        data: { password },
+      });
+    } else {
+      const byName = await prisma.country.findFirst({ where: { name: id } });
+      if (!byName) {
+        res.status(404).json({ error: 'Country not found' });
+        return;
+      }
+      country = await prisma.country.update({
+        where: { id: byName.id },
+        data: { password },
+      });
+    }
     res.json({ success: true, id: country.id });
   } catch (error) {
     console.error('Error setting country password:', error);

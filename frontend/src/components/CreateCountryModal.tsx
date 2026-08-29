@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useGameStore } from '../context/GameContext';
 import { generateId } from '../utils/calculations';
 import { getFlagEmoji } from '../data/flags';
+import { countriesApi } from '../api/client';
 
 type Props = { onClose: () => void };
 
@@ -16,18 +17,55 @@ export default function CreateCountryModal({ onClose }: Props) {
   const [gdp, setGdp] = useState(20);
   const [dailyIncome, setDailyIncome] = useState(1500);
   const [dailyMP, setDailyMP] = useState(300);
+  const [error, setError] = useState('');
+  const [creating, setCreating] = useState(false);
 
-  const create = () => {
+  const create = async () => {
     if (!name.trim()) return;
+    setError('');
+    setCreating(true);
+    const id = generateId();
+    const flag = getFlagEmoji(name.trim());
+
+    // Persist a relational Country row too, so the new country can actually log
+    // in and use the messaging/profile features. The relational row and the
+    // game-state blob row share the same NAME (names are stable across both).
+    try {
+      await countriesApi.create({
+        name: name.trim(),
+        flag,
+        playerName: player,
+        leaderName: leader,
+        governmentName: government,
+        alive: true,
+        dateCreated: state.gameDate,
+        money, mp, gdp, dailyIncome, dailyMP,
+        researchTier: 1,
+        investmentGDP: 0,
+        completedResearch: [],
+        unitInventory: {
+          infantry: { mp: 10, tier: 1 }, artillery: { mp: 2, tier: 1 },
+          tanks: { mp: 0, tier: 1 }, fighterJets: { mp: 0, tier: 1 },
+          bombers: { mp: 0, tier: 1 }, navalForces: { mp: 0, tier: 1 },
+          specialForces: { mp: 0, tier: 1 }, airTurrets: { mp: 0, tier: 1 },
+        },
+        manualOverrides: {},
+      });
+    } catch (e: any) {
+      setError(e.message || 'Failed to create country');
+      setCreating(false);
+      return;
+    }
+
     dispatch({
       type: 'ADD_COUNTRY',
       payload: {
-        id: generateId(),
+        id,
         name: name.trim(),
         playerName: player,
         leaderName: leader,
         governmentName: government,
-        flag: getFlagEmoji(name.trim()),
+        flag,
         alive: true,
         dateCreated: state.gameDate,
         money, mp, gdp, dailyIncome, dailyMP,
@@ -68,7 +106,10 @@ export default function CreateCountryModal({ onClose }: Props) {
           <label>Daily MP<input type="number" className="input-sm full-width" value={dailyMP} onChange={e => setDailyMP(parseInt(e.target.value) || 0)} /></label>
         </div>
         <div className="center-row">
-          <button className="btn btn-success" onClick={create}>CREATE</button>
+          {error && <div className="error-text" style={{ marginBottom: 8 }}>{error}</div>}
+          <button className="btn btn-success" onClick={create} disabled={creating || !name.trim()}>
+            {creating ? 'CREATING...' : 'CREATE'}
+          </button>
         </div>
       </div>
     </div>

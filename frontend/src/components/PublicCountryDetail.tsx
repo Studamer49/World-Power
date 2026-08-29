@@ -16,13 +16,14 @@ type Props = {
 export default function PublicCountryDetail({ country, allCountries, gameState, onBack }: Props) {
   const c = country;
   const config = gameState.militaryConfig;
-  const { countryName } = useAuth();
+  const { countryId, countryName } = useAuth();
   const canEdit = !!countryName && countryName === c.name;
 
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({ playerName: '', leaderName: '', governmentName: '', flag: '' });
   const [saveMsg, setSaveMsg] = useState('');
   const [saveErr, setSaveErr] = useState('');
+  const [profile, setProfile] = useState({ ...c });
 
   const startEdit = () => {
     setForm({
@@ -39,8 +40,15 @@ export default function PublicCountryDetail({ country, allCountries, gameState, 
   const saveProfile = async () => {
     setSaveMsg('');
     setSaveErr('');
+    // updateSelf must hit the relational Country id (what login/middleware use),
+    // NOT the game-state blob id. The backend validates req.countryId === :id.
+    const relationalId = countryId;
+    if (!relationalId) {
+      setSaveErr('Not logged in. Please log in as your country first.');
+      return;
+    }
     try {
-      const updated = await countriesApi.updateSelf(c.id, {
+      const updated = await countriesApi.updateSelf(relationalId, {
         playerName: form.playerName,
         leaderName: form.leaderName,
         governmentName: form.governmentName,
@@ -48,13 +56,15 @@ export default function PublicCountryDetail({ country, allCountries, gameState, 
       });
       setSaveMsg('Profile updated.');
       setEditing(false);
-      // Reflect changes in the local (game-state) copy rendered above.
-      if (gameState.countries[c.id]) {
-        gameState.countries[c.id].playerName = updated.playerName || form.playerName;
-        gameState.countries[c.id].leaderName = updated.leaderName || form.leaderName;
-        gameState.countries[c.id].governmentName = updated.governmentName || form.governmentName;
-        gameState.countries[c.id].flag = updated.flag || form.flag;
-      }
+      // Reflect changes locally (via the poll or local copy) instead of mutating
+      // the parent's shared gameState object.
+      setProfile(prev => ({
+        ...prev,
+        playerName: updated.playerName !== undefined ? updated.playerName : form.playerName,
+        leaderName: updated.leaderName !== undefined ? updated.leaderName : form.leaderName,
+        governmentName: updated.governmentName !== undefined ? updated.governmentName : form.governmentName,
+        flag: updated.flag !== undefined ? updated.flag : form.flag,
+      }));
     } catch (e: any) {
       setSaveErr(e.message || 'Failed to update profile');
     }
@@ -86,19 +96,19 @@ export default function PublicCountryDetail({ country, allCountries, gameState, 
           <h3>IDENTITY</h3>
           <div className="field-row">
             <span className="field-label">Country Name</span>
-            <span className="field-value">{c.name || '\u2014'}</span>
+            <span className="field-value">{profile.name || '\u2014'}</span>
           </div>
           <div className="field-row">
             <span className="field-label">Player</span>
-            <span className="field-value">{c.playerName || '\u2014'}</span>
+            <span className="field-value">{profile.playerName || '\u2014'}</span>
           </div>
           <div className="field-row">
             <span className="field-label">Leader</span>
-            <span className="field-value">{c.leaderName || '\u2014'}</span>
+            <span className="field-value">{profile.leaderName || '\u2014'}</span>
           </div>
           <div className="field-row">
             <span className="field-label">Government</span>
-            <span className="field-value">{c.governmentName || '\u2014'}</span>
+            <span className="field-value">{profile.governmentName || '\u2014'}</span>
           </div>
           <div className="field-row">
             <span className="field-label">Date Created</span>

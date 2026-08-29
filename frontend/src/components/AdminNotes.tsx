@@ -76,7 +76,10 @@ export default function AdminNotes({ gameState, onClose }: Props) {
     if (!passwordCountry || !passwordValue) return;
     setError('');
     try {
-      await countriesApi.setPassword(passwordCountry, passwordValue);
+      // The GameState blob ids differ from relational ids. Pass the country NAME
+      // (stable across both systems); the backend resolves it either way.
+      const country = countries.find(x => x.id === passwordCountry);
+      await countriesApi.setPassword(country ? country.name : passwordCountry, passwordValue);
       setPasswordValue('');
       setShowPasswordBox(false);
       setMessage('Password set.');

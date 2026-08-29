@@ -5,12 +5,18 @@ import { useGameStore } from '../context/GameContext';
 type Props = { gameState: GameState; onClose: () => void };
 
 export default function HistoryViewer({ gameState, onClose }: Props) {
+  const { dispatch } = useGameStore();
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
   const days = Object.keys(gameState.dailySnapshots).map(Number).sort((a, b) => b - a);
 
   const getCountryName = (id: string) => gameState.countries[id]?.name || '???';
 
   const snapshots = selectedDay !== null ? (gameState.dailySnapshots[selectedDay] || []) : [];
+
+  const handleDeleteBattle = (id: string) => {
+    if (!window.confirm('Delete this battle? Its MP losses will be refunded and any captured territory rolled back.')) return;
+    dispatch({ type: 'DELETE_BATTLE', payload: id });
+  };
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -62,6 +68,7 @@ export default function HistoryViewer({ gameState, onClose }: Props) {
               <span className={b.winner === b.attackerId ? 'text-success' : 'text-danger'}>
                 Winner: {getCountryName(b.winner)}
               </span>
+              <button className="btn btn-xs btn-danger" onClick={() => handleDeleteBattle(b.id)}>Delete</button>
             </div>
           ))}
         </div>

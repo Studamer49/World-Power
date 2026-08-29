@@ -21,14 +21,13 @@ export default function DailyUpdate({ gameState, onClose }: Props) {
             const intCount = c.capturedTerritories.filter(t => t.status === 'integrated').length;
             const territoryIncome = occCount * OCCUPIED_MONEY_INCOME + intCount * INTEGRATED_MONEY_INCOME;
             const territoryMP = occCount * OCCUPIED_MP_INCOME + intCount * INTEGRATED_MP_INCOME;
-            const dayExpenses = gameState.allExpenses.filter(e => e.countryId === c.id && e.day === gameState.gameDay);
-            const totalExpenses = dayExpenses.reduce((s, e) => s + e.amount, 0);
-            const dayMPLoss = gameState.allBattles
-              .filter(b => (b.attackerId === c.id || b.defenderId === c.id) && b.day === gameState.gameDay)
-              .reduce((s, b) => s + (b.attackerId === c.id ? b.mpLostAttacker : b.mpLostDefender), 0);
 
-            const newMoney = c.money + dailyIncome + territoryIncome - totalExpenses;
-            const newMP = c.mp + c.dailyMP + territoryMP - dayMPLoss;
+            // NOTE: expenses and battle MP losses are already applied to c.money /
+            // c.mp at record time (ADD_EXPENSE / ADD_BATTLE), and NEXT_DAY does not
+            // re-apply them. So this preview only adds income on top of the current
+            // values and must NOT subtract them again (that would double-count).
+            const newMoney = c.money + dailyIncome + territoryIncome;
+            const newMP = c.mp + c.dailyMP + territoryMP;
 
             return (
               <div key={c.id} className="daily-update-card">
@@ -37,14 +36,12 @@ export default function DailyUpdate({ gameState, onClose }: Props) {
                   <span>MONEY: {formatMoney(c.money)}</span>
                   <span>+{formatMoney(dailyIncome)} income</span>
                   {territoryIncome > 0 && <span>+{formatMoney(territoryIncome)} territory</span>}
-                  {totalExpenses > 0 && <span>-{formatMoney(totalExpenses)} expenses</span>}
                   <span>= <strong>{formatMoney(newMoney)}</strong></span>
                 </div>
                 <div className="du-row">
                   <span>MP: {formatMP(c.mp)}</span>
                   <span>+{formatMP(c.dailyMP)} daily</span>
                   {territoryMP > 0 && <span>+{formatMP(territoryMP)} territory</span>}
-                  {dayMPLoss > 0 && <span>-{formatMP(dayMPLoss)} battle</span>}
                   <span>= <strong>{formatMP(newMP)}</strong></span>
                 </div>
                 <div className="du-row">

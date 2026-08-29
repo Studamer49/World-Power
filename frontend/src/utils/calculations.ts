@@ -333,16 +333,32 @@ export function calculateBattle(
 }
 
 export function autoDistributeLoss(mpLost: number, units: BattleUnit[]): Record<string, number> {
-  const totalEP = units.reduce((sum, u) => sum + u.effectivePower, 0);
-  if (totalEP === 0) return {};
+  const participating = units.filter(u => u.mpCommitted > 0);
+  if (participating.length === 0 || mpLost <= 0) return {};
+  const totalCommitted = participating.reduce((sum, u) => sum + u.mpCommitted, 0);
+  if (totalCommitted <= 0) return {};
+
   const losses: Record<string, number> = {};
   let remaining = mpLost;
-  const sorted = [...units].sort((a, b) => b.effectivePower - a.effectivePower);
+
+  // Round down each unit's proportional share, largest first, so weighted
+  // rounding cannot over-shoot mpLost. Guards against negative/lost remainder.
+  const sorted = [...participating].sort((a, b) => b.mpCommitted - a.mpCommitted);
   for (let i = 0; i < sorted.length; i++) {
     const u = sorted[i];
-    const share = i === sorted.length - 1 ? remaining : Math.round(mpLost * (u.mpCommitted / units.reduce((s, x) => s + x.mpCommitted, 0)));
-    losses[u.unitType] = Math.min(share, u.mpCommitted);
-    remaining -= losses[u.unitType];
+    if (i === sorted.length - 1) {
+      // Last unit absorbs whatever is left (capped at what it can lose).
+      const take = Math.min(remaining, u.mpCommitted);
+      if (take > 0) losses[u.unitType] = (losses[u.unitType] || 0) + take;
+      remaining -= take;
+      continue;
+    }
+    let share = Math.floor(mpLost * (u.mpCommitted / totalCommitted));
+    if (share > u.mpCommitted) share = u.mpCommitted;
+    if (share > remaining) share = remaining;
+    if (share < 0) share = 0;
+    if (share > 0) losses[u.unitType] = (losses[u.unitType] || 0) + share;
+    remaining -= share;
   }
   return losses;
 }

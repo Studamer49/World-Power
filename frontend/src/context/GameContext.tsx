@@ -342,6 +342,23 @@ function gameReducer(state: GameState, action: GameAction): GameState {
           battles: newCountries[battle.defenderId].battles.filter(id => id !== battle.id),
         };
       }
+      // If this battle captured a territory, roll back the capture so the
+      // territory is no longer owned/holding income on future days.
+      if (battle.territoryCaptured && battle.territoryName) {
+        const attacker = newCountries[battle.attackerId];
+        if (attacker) {
+          newCountries[battle.attackerId] = {
+            ...attacker,
+            capturedTerritories: (attacker.capturedTerritories || []).filter(
+              t => !(t.name === battle.territoryName && t.capturedOnDay === battle.day)
+            ),
+            territoryCaptureHistory: (attacker.territoryCaptureHistory || []).filter(entry => {
+              const terrNames = entry.territories.map(t => t.name);
+              return !(entry.day === battle.day && terrNames.includes(battle.territoryName));
+            }),
+          };
+        }
+      }
       return {
         ...state,
         allBattles: state.allBattles.filter(b => b.id !== action.payload),
@@ -743,6 +760,41 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const saveTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const bootstrapped = useRef(false);
+  const inFlightSave = useRef<Promise<void> | null>(null);
+  const dirtyRef = useRef(false);
+  const stateRef = useRef(state);
+  stateRef.current = state;
+
+  // Serialized save: guarantees saves commit in order with the LATEST state, so a
+  // slower older save can never overwrite a newer one (autosave race).
+  const persist = useCallback(async () => {
+    if (inFlightSave.current) {
+      dirtyRef.current = true;
+      return;
+    }
+    const run = async () => {
+      do {
+        dirtyRef.current = false;
+        const snapToSave = stateRef.current;
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(snapToSave));
+        } catch (e) {
+          console.error('Failed to save state to localStorage:', e);
+        }
+        try {
+          await gameStateApi.save(snapToSave);
+          setSaveStatus('saved');
+        } catch (e) {
+          console.error('Failed to save game state to DB:', e);
+          setSaveStatus('saved');
+        }
+      } while (dirtyRef.current);
+    };
+    inFlightSave.current = run().finally(() => {
+      inFlightSave.current = null;
+    });
+    await inFlightSave.current;
+  }, []);
 
   // Load game state from the database on mount (single source of truth)
   useEffect(() => {
@@ -773,36 +825,16 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setSaveStatus('saving');
     if (saveTimeout.current) clearTimeout(saveTimeout.current);
     saveTimeout.current = setTimeout(() => {
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-      } catch (e) {
-        console.error('Failed to save state to localStorage:', e);
-      }
-      gameStateApi.save(state)
-        .then(() => setSaveStatus('saved'))
-        .catch((e) => {
-          console.error('Failed to save game state to DB:', e);
-          setSaveStatus('saved');
-        });
+      persist();
     }, 500);
     return () => {
       if (saveTimeout.current) clearTimeout(saveTimeout.current);
     };
-  }, [state]);
+  }, [state, persist]);
 
   const forceSave = useCallback(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    } catch (e) {
-      console.error('Failed to force save to localStorage:', e);
-    }
-    gameStateApi.save(state)
-      .then(() => setSaveStatus('saved'))
-      .catch((e) => {
-        console.error('Failed to force save to DB:', e);
-        setSaveStatus('saved');
-      });
-  }, [state]);
+    persist();
+  }, [persist]);
 
   return (
     <GameContext.Provider value={{ state, dispatch, saveStatus, forceSave, loading }}>
